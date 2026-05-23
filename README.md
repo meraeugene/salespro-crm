@@ -1,36 +1,113 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# SalesPro CRM
 
-## Getting Started
+SalesPro CRM is a full-stack sales workspace for managing companies, leads, contacts, deals, tasks, notifications, and revenue analytics.
 
-First, run the development server:
+It is built with Next.js App Router, TypeScript, Supabase, Tailwind CSS, SWR, Zustand, Recharts, React Hook Form, Zod, Framer Motion, and Lucide icons.
+
+## Features
+
+- Secure sign-in, forgot password, protected routes, and role-aware access.
+- Company-first CRM workflow with company dropdowns on lead and contact forms.
+- Leads table with search, sort, filters, edit, delete, and assigned sales rep tracking.
+- Deal pipeline with drag-and-drop stages and automatic close probability.
+- Task board with drag-and-drop Todo, In Progress, and Done columns.
+- Notification center with read/unread behavior and badge count updates.
+- Admin tools for creating users, assigning roles, deleting users, and recovery links.
+- Supabase schema, RLS policies, seed users, and demo CRM data.
+
+## Roles
+
+- `admin`: manages accounts, roles, recovery links, and login logs.
+- `sales_manager`: manages the CRM workspace and assigns work to representatives.
+- `sales_representative`: owns assigned leads, contacts, deals, and tasks.
+
+## CRM Workflow
+
+1. Admin creates users.
+2. Manager creates companies first.
+3. Manager creates contacts and leads under existing companies.
+4. Manager assigns sales records to a sales representative.
+5. Leads are qualified and converted into deal work.
+6. Deals move through the pipeline.
+7. Tasks and notes track follow-up.
+8. Dashboard and analytics summarize pipeline health, revenue, and rep performance.
+
+## Deal Probability
+
+Deal close probability is calculated from the deal stage:
+
+| Stage | Probability |
+| --- | ---: |
+| New Lead | 10% |
+| Contacted | 20% |
+| Qualified | 40% |
+| Proposal Sent | 60% |
+| Negotiation | 80% |
+| Won | 100% |
+| Lost | 0% |
+
+## Local Setup
+
+Install dependencies:
+
+```bash
+npm install
+```
+
+Create `.env.local` and add:
+
+```bash
+NEXT_PUBLIC_SUPABASE_URL=your-project-url
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
+SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
+```
+
+Run `supabase/schema.sql` in the Supabase SQL editor.
+
+Create demo auth users:
+
+```bash
+npm run supabase:demo-users
+```
+
+Then run `supabase/seed.sql` in the Supabase SQL editor.
+
+Demo users use password `Salespro123!`:
+
+- `admin@salespro.test`
+- `manager@salespro.test`
+- `rep@salespro.test`
+
+Start the app:
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open `http://localhost:3000`.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Scripts
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```bash
+npm run dev
+npm run build
+npm run start
+npm run lint
+npm run supabase:demo-users
+```
 
-## Learn More
+## Project Structure
 
-To learn more about Next.js, take a look at the following resources:
+- `app/`: routes, API handlers, layouts, loading states, and auth pages.
+- `components/`: UI, layout, forms, tables, charts, admin, deals, and tasks.
+- `hooks/`: SWR data hooks.
+- `lib/`: auth helpers, Supabase clients, utilities, mock data, and deal probability logic.
+- `store/`: Zustand UI state.
+- `validations/`: Zod schemas.
+- `supabase/`: database schema, seed users, and seed CRM data.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Notes
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+Without Supabase environment variables, API routes serve mock data so the UI can still be reviewed locally.
 
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Use `supabase/clear-all-data.sql` if you want to empty CRM records while keeping auth users and profiles.

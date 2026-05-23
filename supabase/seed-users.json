@@ -1,0 +1,22 @@
+[
+  {
+    "email": "admin@salespro.test",
+    "password": "Salespro123!",
+    "full_name": "Avery Stone",
+    "role": "admin"
+  },
+  {
+    "email": "manager@salespro.test",
+    "password": "Salespro123!",
+    "full_name": "Maya Chen",
+    "role": "sales_manager",
+    "manager_email": "admin@salespro.test"
+  },
+  {
+    "email": "rep@salespro.test",
+    "password": "Salespro123!",
+    "full_name": "Jordan Lee",
+    "role": "sales_representative",
+    "manager_email": "manager@salespro.test"
+  }
+]
