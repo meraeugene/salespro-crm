@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { createClient as createSupabaseAdmin } from "@supabase/supabase-js";
 import { handleError, hasSupabaseEnv, requireRole } from "@/lib/api";
 import type { DashboardMetrics } from "@/types/crm";
 
@@ -22,12 +23,14 @@ export async function GET() {
     revenueGenerated: 0,
     conversionRate: 0,
     topSalesRep: "No rep yet",
+    topSalesRepStats: undefined,
     revenueSeries: [],
     sourceSeries: [],
     pipelineProgress: [
       { name: "Completed", value: 0, color: "#1d4ed8" },
       { name: "In Progress", value: 0, color: "#3b82f6" },
       { name: "Pending", value: 0, color: "#dbeafe" },
+      { name: "Lost", value: 0, color: "#bfdbfe" },
     ],
     teamPerformance: [],
     forecastSeries: [],
@@ -68,13 +71,47 @@ export async function GET() {
     if (leadsError) throw leadsError;
     if (tasksError) throw tasksError;
 
+    let leaderboardDeals = deals;
+    let leaderboardLeads = leads;
+    let leaderboardTasks = tasks;
+    const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    if (profile?.role === "sales_representative" && serviceRoleKey && supabaseUrl) {
+      const adminClient = createSupabaseAdmin(supabaseUrl, serviceRoleKey, {
+        auth: { persistSession: false, autoRefreshToken: false },
+      });
+      const [
+        { data: allDeals, error: allDealsError },
+        { data: allLeads, error: allLeadsError },
+        { data: allTasks, error: allTasksError },
+      ] = await Promise.all([
+        adminClient
+          .from("deals")
+          .select("id, value, stage, assigned_to, expected_close_date, created_at, forecast_category, profiles:assigned_to(full_name)")
+          .order("created_at", { ascending: true }),
+        adminClient
+          .from("leads")
+          .select("id, status, lead_source, created_at, assigned_to, profiles:assigned_to(full_name)")
+          .order("created_at", { ascending: true }),
+        adminClient
+          .from("tasks")
+          .select("id, status, due_date, assigned_to, profiles:assigned_to(full_name)")
+          .order("due_date", { ascending: true }),
+      ]);
+      if (allDealsError) throw allDealsError;
+      if (allLeadsError) throw allLeadsError;
+      if (allTasksError) throw allTasksError;
+      leaderboardDeals = allDeals ?? [];
+      leaderboardLeads = allLeads ?? [];
+      leaderboardTasks = allTasks ?? [];
+    }
+
     const totalDealsClosed = deals.filter((deal) => deal.stage === "Won").length;
     const revenueGenerated = deals
       .filter((deal) => deal.stage === "Won")
       .reduce((sum, deal) => sum + Number(deal.value ?? 0), 0);
-    const closedLeads = leads.filter((lead) => lead.status === "Won" || lead.status === "Lost").length;
     const wonLeads = leads.filter((lead) => lead.status === "Won").length;
-    const conversionRate = closedLeads ? Math.round((wonLeads / closedLeads) * 100) : 0;
+    const conversionRate = leads.length ? Math.round((wonLeads / leads.length) * 100) : 0;
 
     const revenueByMonth = new Map<string, number>();
     for (const deal of deals) {
@@ -110,57 +147,80 @@ export async function GET() {
       {
         name: "In Progress",
         value: Math.round(
-          (((stageCounts.get("Negotiation") ?? 0) + (stageCounts.get("Proposal Sent") ?? 0) + (stageCounts.get("Qualified") ?? 0)) /
+          (((stageCounts.get("Contacted") ?? 0) + (stageCounts.get("Negotiation") ?? 0) + (stageCounts.get("Proposal Sent") ?? 0) + (stageCounts.get("Qualified") ?? 0)) /
             totalDeals) *
             100,
         ),
         color: "#3b82f6",
       },
       { name: "Pending", value: Math.round(((stageCounts.get("New Lead") ?? 0) / totalDeals) * 100), color: "#dbeafe" },
+      { name: "Lost", value: Math.round(((stageCounts.get("Lost") ?? 0) / totalDeals) * 100), color: "#bfdbfe" },
     ];
 
-    const repTotals = new Map<string, { assignedLeads: number; activeDeals: number; wonDeals: number; lostDeals: number; overdueTasks: number; revenue: number }>();
-    const ensureRep = (name: string) => {
-      const existing = repTotals.get(name) ?? { assignedLeads: 0, activeDeals: 0, wonDeals: 0, lostDeals: 0, overdueTasks: 0, revenue: 0 };
-      repTotals.set(name, existing);
-      return existing;
-    };
-    for (const lead of leads) {
-      const repName = joinedProfileName(lead.profiles) ?? "Unassigned";
-      ensureRep(repName).assignedLeads += 1;
-    }
-    for (const deal of deals) {
-      const repName = joinedProfileName(deal.profiles) ?? "Unassigned";
-      const totals = ensureRep(repName);
-      if (deal.stage === "Won") {
-        totals.wonDeals += 1;
-        totals.revenue += Number(deal.value ?? 0);
-      } else if (deal.stage === "Lost") {
-        totals.lostDeals += 1;
-      } else {
-        totals.activeDeals += 1;
+    const buildRepPerformance = (
+      repDeals: typeof deals,
+      repLeads: typeof leads,
+      repTasks: typeof tasks,
+    ) => {
+      const repTotals = new Map<string, { assignedLeads: number; activeDeals: number; wonDeals: number; lostDeals: number; overdueTasks: number; revenue: number }>();
+      const ensureRep = (name: string) => {
+        const existing = repTotals.get(name) ?? { assignedLeads: 0, activeDeals: 0, wonDeals: 0, lostDeals: 0, overdueTasks: 0, revenue: 0 };
+        repTotals.set(name, existing);
+        return existing;
+      };
+      for (const lead of repLeads) {
+        const repName = joinedProfileName(lead.profiles) ?? "Unassigned";
+        ensureRep(repName).assignedLeads += 1;
       }
-    }
-    const today = new Date();
-    const todayKey = new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime();
-    for (const task of tasks) {
-      const repName = joinedProfileName(task.profiles) ?? "Unassigned";
-      const dueTime = task.due_date ? new Date(task.due_date).getTime() : null;
-      if (task.status !== "Done" && dueTime !== null && dueTime < todayKey) ensureRep(repName).overdueTasks += 1;
-    }
+      for (const deal of repDeals) {
+        const repName = joinedProfileName(deal.profiles) ?? "Unassigned";
+        const totals = ensureRep(repName);
+        if (deal.stage === "Won") {
+          totals.wonDeals += 1;
+          totals.revenue += Number(deal.value ?? 0);
+        } else if (deal.stage === "Lost") {
+          totals.lostDeals += 1;
+        } else {
+          totals.activeDeals += 1;
+        }
+      }
+      const today = new Date();
+      const todayKey = new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime();
+      for (const task of repTasks) {
+        const repName = joinedProfileName(task.profiles) ?? "Unassigned";
+        const dueTime = task.due_date ? new Date(task.due_date).getTime() : null;
+        if (task.status !== "Done" && dueTime !== null && dueTime < todayKey) ensureRep(repName).overdueTasks += 1;
+      }
+      return Array.from(repTotals.entries())
+        .map(([name, totals]) => ({
+          name,
+          assignedLeads: totals.assignedLeads,
+          activeDeals: totals.activeDeals,
+          wonDeals: totals.wonDeals,
+          lostDeals: totals.lostDeals,
+          winRate: totals.wonDeals + totals.lostDeals ? Math.round((totals.wonDeals / (totals.wonDeals + totals.lostDeals)) * 100) : 0,
+          overdueTasks: totals.overdueTasks,
+          revenue: totals.revenue,
+        }))
+        .sort((a, b) => {
+          if (b.wonDeals !== a.wonDeals) return b.wonDeals - a.wonDeals;
+          if (b.revenue !== a.revenue) return b.revenue - a.revenue;
+          if (b.activeDeals !== a.activeDeals) return b.activeDeals - a.activeDeals;
+          return b.assignedLeads - a.assignedLeads;
+        });
+    };
 
-    const teamPerformance = Array.from(repTotals.entries())
-      .map(([name, totals]) => ({
-        name,
-        assignedLeads: totals.assignedLeads,
-        activeDeals: totals.activeDeals,
-        wonDeals: totals.wonDeals,
-        lostDeals: totals.lostDeals,
-        winRate: totals.wonDeals + totals.lostDeals ? Math.round((totals.wonDeals / (totals.wonDeals + totals.lostDeals)) * 100) : 0,
-        overdueTasks: totals.overdueTasks,
-        revenue: totals.revenue,
-      }))
-      .sort((a, b) => b.revenue - a.revenue);
+    const teamPerformance = buildRepPerformance(deals, leads, tasks);
+    const leaderboard = buildRepPerformance(leaderboardDeals, leaderboardLeads, leaderboardTasks);
+    const topSalesRepStats = leaderboard[0]
+      ? {
+          name: leaderboard[0].name,
+          assignedLeads: leaderboard[0].assignedLeads,
+          activeDeals: leaderboard[0].activeDeals,
+          wonDeals: leaderboard[0].wonDeals,
+          revenue: leaderboard[0].revenue,
+        }
+      : undefined;
     const forecastByMonth = new Map<string, { month: string; commit: number; bestCase: number; pipeline: number }>();
     for (const deal of deals.filter((item) => item.stage !== "Won" && item.stage !== "Lost")) {
       const date = deal.expected_close_date ?? deal.created_at;
@@ -177,7 +237,8 @@ export async function GET() {
       totalDealsClosed,
       revenueGenerated,
       conversionRate,
-      topSalesRep: teamPerformance[0]?.name ?? "No rep yet",
+      topSalesRep: topSalesRepStats?.name ?? "No rep yet",
+      topSalesRepStats,
       revenueSeries,
       sourceSeries,
       pipelineProgress,

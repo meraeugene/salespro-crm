@@ -138,7 +138,9 @@ export function LeadsPageClient() {
         <div>
           <h1 className="text-3xl font-semibold">Leads</h1>
           <p className="mt-1 text-muted">
-            Leads are potential buyers or opportunities you are still qualifying. Assign a sales rep, update status, and turn qualified interest into a deal.
+            {isManager
+              ? "Leads are potential buyers or opportunities you are still qualifying. Assign a sales rep, update status, and turn qualified interest into a deal."
+              : "Leads are potential buyers or opportunities assigned to you. Keep each lead updated as you qualify the next step."}
           </p>
         </div>
         {isManager ? (
@@ -925,6 +927,7 @@ function ResourceItem({
   const id = String(item.id ?? "");
   const readActivityIds = useUiStore((state) => state.readActivityIds);
   const markActivityRead = useUiStore((state) => state.markActivityRead);
+  const [noteExpanded, setNoteExpanded] = useState(false);
   const labelize = (value: string) => {
     const text = humanize(value);
     return text ? text.charAt(0).toUpperCase() + text.slice(1) : "";
@@ -1101,6 +1104,8 @@ function ResourceItem({
 
   if (resource === "notes") {
     const noteType = labelize(String(item.related_type ?? "general"));
+    const noteBody = String(item.body ?? "Note");
+    const canExpandNote = noteBody.length > 110;
     return (
       <div className="min-h-[158px] rounded-xl border border-border bg-white p-4 shadow-[0_8px_22px_rgba(17,24,39,0.04)]">
         <div className="flex items-start justify-between gap-3">
@@ -1110,12 +1115,20 @@ function ResourceItem({
             </span>
             <div className="min-w-0">
               <StatusBadge status={noteType} />
-              <h3 className="mt-4 line-clamp-2 font-semibold">
-                {String(item.body ?? "Note")}
+              <h3 className={`mt-4 font-semibold ${noteExpanded ? "" : "line-clamp-2"}`}>
+                {noteBody}
               </h3>
+              {canExpandNote ? (
+                <button
+                  type="button"
+                  className="mt-2 text-sm font-medium text-primary hover:text-primary-dark"
+                  onClick={() => setNoteExpanded((value) => !value)}
+                >
+                  {noteExpanded ? "Show less" : "Read more"}
+                </button>
+              ) : null}
             </div>
           </div>
-          <ResourceCardActions id={id} label="Note" item={item} canDelete={canDelete} onEdit={onEdit} onDelete={onDelete} />
         </div>
         <div className="mt-5 flex items-center gap-2 border-t border-border pt-4 text-sm text-muted">
           <CalendarDays className="h-4 w-4" />

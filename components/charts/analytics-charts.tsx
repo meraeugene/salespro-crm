@@ -84,6 +84,7 @@ export function AnalyticsCharts({ metrics }: { metrics: DashboardMetrics }) {
     Completed: "Closed won deals",
     "In Progress": "Open active deals",
     Pending: "New deals",
+    Lost: "Closed lost deals",
   };
   const pipelineHealth = metrics.pipelineProgress
     .map((item) => ({ ...item, color: pipelinePalette[item.name] ?? "#2563eb", name: pipelineLabels[item.name] ?? item.name }))

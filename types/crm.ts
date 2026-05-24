@@ -135,6 +135,7 @@ export type DashboardMetrics = {
   revenueGenerated: number;
   conversionRate: number;
   topSalesRep: string;
+  topSalesRepStats?: { name: string; assignedLeads: number; activeDeals: number; wonDeals: number; revenue: number };
   revenueSeries: Array<{ month: string; revenue: number; target: number }>;
   sourceSeries: Array<{ name: string; value: number }>;
   pipelineProgress: Array<{ name: string; value: number; color: string }>;

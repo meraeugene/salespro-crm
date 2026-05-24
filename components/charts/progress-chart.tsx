@@ -4,6 +4,8 @@ import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
 import type { DashboardMetrics } from "@/types/crm";
 
 export function ProgressChart({ data }: { data: DashboardMetrics["pipelineProgress"] }) {
+  const wonShare = data.find((item) => item.name === "Completed")?.value ?? 0;
+
   return (
     <div>
       <div className="relative mx-auto h-72 max-w-sm">
@@ -18,7 +20,7 @@ export function ProgressChart({ data }: { data: DashboardMetrics["pipelineProgre
           </PieChart>
         </ResponsiveContainer>
         <div className="absolute inset-0 flex flex-col items-center justify-center">
-          <span className="text-5xl font-semibold">41%</span>
+          <span className="text-5xl font-semibold">{wonShare}%</span>
           <span className="mt-1 text-sm text-muted">Deals won</span>
         </div>
       </div>

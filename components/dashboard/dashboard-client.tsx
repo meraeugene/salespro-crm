@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { motion } from "framer-motion";
-import { Crown, Handshake, MoreVertical, TrendingDown, TrendingUp, WalletCards } from "lucide-react";
+import { Crown, Handshake, TrendingUp, WalletCards } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { LeadsTable } from "@/components/tables/leads-table";
 import { ProgressChart } from "@/components/charts/progress-chart";
@@ -32,11 +32,17 @@ export function DashboardClient() {
 
   if (metricsLoading || !metrics) return <DashboardSkeleton />;
 
+  const topRep = metrics.topSalesRepStats;
   const stats = [
-    { label: "Total Deals Closed", value: metrics.totalDealsClosed.toLocaleString(), delta: "+12%", positive: false, iconClass: "text-indigo-600" },
-    { label: "Revenue Generated", value: currency(metrics.revenueGenerated), delta: "+10%", positive: true, iconClass: "text-emerald-600" },
-    { label: "Sales Conversion Rate", value: `${metrics.conversionRate}%`, delta: "+3%", positive: false, iconClass: "text-blue-600" },
-    { label: "Top Sales Rep", value: metrics.topSalesRep, delta: "15 deals closed", positive: true, iconClass: "text-amber-600" },
+    { label: "Total Deals Closed", value: metrics.totalDealsClosed.toLocaleString(), detail: "Won deals", iconClass: "text-indigo-600" },
+    { label: "Revenue Generated", value: currency(metrics.revenueGenerated), detail: "Closed-won revenue", iconClass: "text-emerald-600" },
+    { label: "Sales Conversion Rate", value: `${metrics.conversionRate}%`, detail: "Won leads / total leads", iconClass: "text-blue-600" },
+    {
+      label: "Top Sales Rep",
+      value: topRep?.name ?? metrics.topSalesRep,
+      detail: topRep ? `${topRep.wonDeals} won • ${topRep.activeDeals} active • ${topRep.assignedLeads} leads` : "No assigned work yet",
+      iconClass: "text-amber-600",
+    },
   ];
   const periodLimit = period === "weekly" ? 4 : period === "monthly" ? 6 : metrics.revenueSeries.length;
   const revenueSeries = metrics.revenueSeries.slice(-periodLimit);
@@ -81,15 +87,14 @@ export function DashboardClient() {
                     <Icon className={`h-5 w-5 ${stat.iconClass}`} />
                     <CardTitle className="text-sm text-muted">{stat.label}</CardTitle>
                   </div>
-                  <MoreVertical className="h-5 w-5 text-muted" />
                 </CardHeader>
                 <CardContent>
                   <div className="flex items-end justify-between gap-3">
                     <div>
                       <div className={stat.label === "Top Sales Rep" ? "text-2xl font-semibold tracking-tight" : "text-4xl font-semibold tracking-tight"}>{stat.value}</div>
                       <div className="mt-2 flex items-center gap-1 text-sm">
-                        <span>{stat.delta}</span>
-                        {stat.positive ? <TrendingUp className="h-3.5 w-3.5 text-blue-500" /> : <TrendingDown className="h-3.5 w-3.5 text-rose-500" />}
+                        <span>{stat.detail}</span>
+                        <TrendingUp className="h-3.5 w-3.5 text-blue-500" />
                       </div>
                     </div>
                     <div className="flex h-16 items-end gap-2">
