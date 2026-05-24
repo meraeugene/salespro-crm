@@ -11,9 +11,11 @@ const salesRoles = ["sales_manager", "sales_representative"] as const;
 
 export async function GET() {
   if (!hasSupabaseEnv()) return NextResponse.json(activities);
-  const { supabase, error } = await requireRole([...salesRoles]);
+  const { supabase, user, profile, error } = await requireRole([...salesRoles]);
   if (error) return error;
-  const { data, error: dbError } = await supabase.from("activities").select("*").order("created_at", { ascending: false }).limit(50);
+  let query = supabase.from("activities").select("*").order("created_at", { ascending: false }).limit(50);
+  if (profile?.role === "sales_representative") query = query.eq("created_by", user.id);
+  const { data, error: dbError } = await query;
   if (dbError) return handleError(dbError);
   return NextResponse.json(data);
 }
@@ -21,7 +23,7 @@ export async function GET() {
 export async function DELETE(request: Request) {
   const body = await request.json().catch(() => ({}));
   if (!hasSupabaseEnv()) return NextResponse.json({ ok: true });
-  const { supabase, error } = await requireRole([...salesRoles]);
+  const { supabase, user, profile, error } = await requireRole([...salesRoles]);
   if (error) return error;
 
   const id = typeof body.id === "string" ? body.id : null;
@@ -32,8 +34,11 @@ export async function DELETE(request: Request) {
         auth: { persistSession: false, autoRefreshToken: false },
       })
     : supabase;
-  const query = writeClient.from("activities").delete();
-  const { error: dbError } = id ? await query.eq("id", id) : await query.neq("action", "__never__");
+  let query = writeClient.from("activities").delete();
+  if (id) query = query.eq("id", id);
+  if (profile?.role === "sales_representative") query = query.eq("created_by", user.id);
+  if (!id && profile?.role !== "sales_representative") query = query.neq("action", "__never__");
+  const { error: dbError } = await query;
   if (dbError) return handleError(dbError);
   return NextResponse.json({ ok: true });
 }

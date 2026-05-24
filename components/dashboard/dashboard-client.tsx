@@ -129,13 +129,13 @@ export function DashboardClient() {
 
         <Card>
           <CardHeader>
-            <CardTitle>Pipeline Progress</CardTitle>
+            <CardTitle>Deal Status</CardTitle>
           </CardHeader>
           <CardContent>
             {metrics.pipelineProgress.some((item) => item.value > 0) ? (
               <ProgressChart data={metrics.pipelineProgress} />
             ) : (
-              <EmptyState title="No data yet" description="Create deals to populate pipeline progress." />
+              <EmptyState title="No data yet" description="Create deals to see won, active, and pending opportunities." />
             )}
           </CardContent>
         </Card>

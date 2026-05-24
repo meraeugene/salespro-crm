@@ -10,9 +10,11 @@ import { Pagination } from "@/components/ui/pagination";
 import { Skeleton } from "@/components/ui/skeleton";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { shortDate } from "@/lib/utils";
+import { useUiStore } from "@/store/ui-store";
 import type { Lead } from "@/types/crm";
 
 export function LeadsTable({ leads, isLoading = false, onEdit, onDelete }: { leads?: Lead[]; isLoading?: boolean; onEdit?: (lead: Lead) => void; onDelete?: (lead: Lead) => void }) {
+  const globalSearch = useUiStore((state) => state.search);
   const [query, setQuery] = useState("");
   const [page, setPage] = useState(1);
   const [sortAsc, setSortAsc] = useState(true);
@@ -25,15 +27,20 @@ export function LeadsTable({ leads, isLoading = false, onEdit, onDelete }: { lea
   const sources = useMemo(() => Array.from(new Set((leads ?? []).map((lead) => lead.lead_source))).sort(), [leads]);
   const activeFilterCount = Number(Boolean(statusFilter)) + Number(Boolean(sourceFilter));
   const hasFilters = activeFilterCount > 0;
+  const showActions = Boolean(onEdit || onDelete);
 
   const filtered = useMemo(() => {
     const source = leads ?? [];
+    const terms = `${globalSearch} ${query}`.toLowerCase().split(/\s+/).filter(Boolean);
     return source
-      .filter((lead) => `${lead.full_name} ${lead.company} ${lead.email}`.toLowerCase().includes(query.toLowerCase()))
+      .filter((lead) => {
+        const haystack = `${lead.full_name} ${lead.company} ${lead.email} ${lead.phone} ${lead.lead_source} ${lead.assigned_user ?? ""}`.toLowerCase();
+        return terms.every((term) => haystack.includes(term));
+      })
       .filter((lead) => (statusFilter ? lead.status === statusFilter : true))
       .filter((lead) => (sourceFilter ? lead.lead_source === sourceFilter : true))
       .sort((a, b) => (sortAsc ? a.full_name.localeCompare(b.full_name) : b.full_name.localeCompare(a.full_name)));
-  }, [leads, query, sortAsc, sourceFilter, statusFilter]);
+  }, [globalSearch, leads, query, sortAsc, sourceFilter, statusFilter]);
 
   const pageCount = Math.max(1, Math.ceil(filtered.length / pageSize));
   const rows = filtered.slice((page - 1) * pageSize, page * pageSize);
@@ -62,7 +69,7 @@ export function LeadsTable({ leads, isLoading = false, onEdit, onDelete }: { lea
                 <h3 className="font-semibold">Filter leads</h3>
                 <p className="mt-1 text-xs text-muted">Narrow the table by status or source.</p>
               </div>
-              <Button type="button" variant="ghost" size="icon" onClick={() => setFiltersOpen(false)} aria-label="Close filters">
+              <Button type="button" variant="ghost" size="icon" className="bg-blue-50 text-primary hover:bg-primary hover:text-white" onClick={() => setFiltersOpen(false)} aria-label="Close filters">
                 <X className="h-4 w-4" />
               </Button>
             </div>
@@ -113,17 +120,18 @@ export function LeadsTable({ leads, isLoading = false, onEdit, onDelete }: { lea
         </div>
       ) : (
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[980px] border-collapse text-left text-sm">
+          <table className="w-full min-w-[1080px] border-collapse text-left text-sm">
             <thead className="bg-slate-50 text-muted">
               <tr>
                 <th className="px-5 py-4 font-medium">Lead Name</th>
                 <th className="px-5 py-4 font-medium">Company</th>
                 <th className="px-5 py-4 font-medium">Email Address</th>
                 <th className="px-5 py-4 font-medium">Phone Number</th>
+                <th className="px-5 py-4 font-medium">Lead Source</th>
                 <th className="px-5 py-4 font-medium">Last Contacted</th>
                 <th className="px-5 py-4 font-medium">Status</th>
                 <th className="px-5 py-4 font-medium">Assigned Sales Rep</th>
-                <th className="px-5 py-4 font-medium">Actions</th>
+                {showActions ? <th className="px-5 py-4 font-medium">Actions</th> : null}
               </tr>
             </thead>
             <tbody>
@@ -133,14 +141,17 @@ export function LeadsTable({ leads, isLoading = false, onEdit, onDelete }: { lea
                   <td className="px-5 py-4 text-muted">{lead.company}</td>
                   <td className="px-5 py-4 text-muted">{lead.email}</td>
                   <td className="px-5 py-4 text-muted">{lead.phone}</td>
+                  <td className="px-5 py-4 text-muted">{lead.lead_source}</td>
                   <td className="px-5 py-4 text-muted">{shortDate(lead.last_contacted)}</td>
                   <td className="px-5 py-4">
                     <StatusBadge status={lead.status} />
                   </td>
                   <td className="px-5 py-4 text-muted">{lead.assigned_user ?? "Unassigned"}</td>
-                  <td className="px-5 py-4">
-                    <LeadActions lead={lead} onEdit={onEdit} onDelete={onDelete} />
-                  </td>
+                  {showActions ? (
+                    <td className="px-5 py-4">
+                      <LeadActions lead={lead} onEdit={onEdit} onDelete={onDelete} />
+                    </td>
+                  ) : null}
                 </tr>
               ))}
             </tbody>

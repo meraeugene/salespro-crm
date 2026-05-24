@@ -9,9 +9,11 @@ const salesRoles = ["sales_manager", "sales_representative"] as const;
 
 export async function GET() {
   if (!hasSupabaseEnv()) return NextResponse.json(deals.map((deal) => ({ ...deal, probability: probabilityForStage(deal.stage) })));
-  const { supabase, error } = await requireRole([...salesRoles]);
+  const { supabase, user, profile, error } = await requireRole([...salesRoles]);
   if (error) return error;
-  const { data, error: dbError } = await supabase.from("deals").select("*, profiles:assigned_to(full_name)").order("created_at", { ascending: false });
+  let query = supabase.from("deals").select("*, profiles:assigned_to(full_name)").order("created_at", { ascending: false });
+  if (profile?.role === "sales_representative") query = query.eq("assigned_to", user.id);
+  const { data, error: dbError } = await query;
   if (dbError) return handleError(dbError);
   return NextResponse.json(data.map((deal) => ({ ...deal, probability: probabilityForStage(deal.stage), assigned_user: deal.profiles?.full_name ?? null })));
 }
@@ -21,7 +23,7 @@ export async function POST(request: Request) {
   if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   const createData = { ...parsed.data, probability: probabilityForStage(parsed.data.stage) };
   if (!hasSupabaseEnv()) return NextResponse.json({ ...createData, id: crypto.randomUUID(), created_at: new Date().toISOString() });
-  const { supabase, user, error } = await requireRole([...salesRoles]);
+  const { supabase, user, error } = await requireRole(["sales_manager"]);
   if (error) return error;
   const { data, error: dbError } = await supabase
     .from("deals")
@@ -37,13 +39,18 @@ export async function PATCH(request: Request) {
   const parsed = dealSchema.partial().extend({ id: z.string().min(1) }).safeParse(body);
   if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   if (!hasSupabaseEnv()) return NextResponse.json(body);
-  const { supabase, user, error } = await requireRole([...salesRoles]);
+  const { supabase, user, profile, error } = await requireRole([...salesRoles]);
   if (error) return error;
   const { id, ...parsedUpdates } = parsed.data;
   const updates = parsedUpdates.stage
     ? { ...parsedUpdates, probability: probabilityForStage(parsedUpdates.stage) }
     : parsedUpdates;
-  const { data, error: dbError } = await supabase.from("deals").update(updates).eq("id", id).select().single();
+  if (profile?.role === "sales_representative" && "assigned_to" in updates) {
+    return NextResponse.json({ error: "Sales representatives cannot reassign deals." }, { status: 403 });
+  }
+  let query = supabase.from("deals").update(updates).eq("id", id);
+  if (profile?.role === "sales_representative") query = query.eq("assigned_to", user.id);
+  const { data, error: dbError } = await query.select().single();
   if (dbError) return handleError(dbError);
   await supabase.from("activities").insert({
     action: updates.stage ? `Deal moved to ${updates.stage}` : "Deal updated",
@@ -65,7 +72,7 @@ export async function DELETE(request: Request) {
   const { id } = await request.json();
   if (!id || typeof id !== "string") return NextResponse.json({ error: "Missing deal id." }, { status: 400 });
   if (!hasSupabaseEnv()) return NextResponse.json({ ok: true });
-  const { supabase, error } = await requireRole([...salesRoles]);
+  const { supabase, error } = await requireRole(["sales_manager"]);
   if (error) return error;
   const { error: dbError } = await supabase.from("deals").delete().eq("id", id);
   if (dbError) return handleError(dbError);

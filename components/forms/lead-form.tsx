@@ -12,6 +12,7 @@ import { PhoneField } from "@/components/forms/phone-field";
 import { Button } from "@/components/ui/button";
 import { Input, Select, Textarea } from "@/components/ui/input";
 import { StatusBadge } from "@/components/ui/status-badge";
+import { useMe } from "@/hooks/use-crm";
 import { mutateJson } from "@/services/fetcher";
 import { leadSchema } from "@/validations/crm";
 
@@ -20,6 +21,8 @@ type FormMode = "create" | "edit";
 
 export function LeadForm({ onDone, initialValues, id, mode = "create" }: { onDone?: () => void; initialValues?: Partial<LeadValues>; id?: string; mode?: FormMode }) {
   const { mutate } = useSWRConfig();
+  const { data: me } = useMe();
+  const canAssign = me?.role === "sales_manager";
   const form = useForm<LeadValues>({
     resolver: zodResolver(leadSchema),
     defaultValues: {
@@ -36,7 +39,9 @@ export function LeadForm({ onDone, initialValues, id, mode = "create" }: { onDon
 
   async function onSubmit(values: LeadValues) {
     try {
-      await mutateJson("/api/leads", mode === "edit" ? "PATCH" : "POST", mode === "edit" ? { ...values, id } : values);
+      const payload = { ...values };
+      if (!canAssign) delete payload.assigned_to;
+      await mutateJson("/api/leads", mode === "edit" ? "PATCH" : "POST", mode === "edit" ? { ...payload, id } : payload);
       await mutate("/api/leads");
       if (mode === "create") form.reset();
       toast.success(mode === "edit" ? "Lead updated." : "Lead saved.");
@@ -59,15 +64,17 @@ export function LeadForm({ onDone, initialValues, id, mode = "create" }: { onDon
 
   return (
     <form className="grid gap-4 md:grid-cols-2" noValidate onSubmit={form.handleSubmit(onSubmit)}>
-      <label className="text-sm font-medium md:col-span-2">
-        Assigned sales rep
-        <Controller
-          control={form.control}
-          name="assigned_to"
-          render={({ field }) => <AssignedUserSelect value={field.value} onChange={field.onChange} onBlur={field.onBlur} error={errors.assigned_to?.message} />}
-        />
-        {fieldError(errors.assigned_to?.message)}
-      </label>
+      {canAssign ? (
+        <label className="text-sm font-medium md:col-span-2">
+          Assigned sales rep
+          <Controller
+            control={form.control}
+            name="assigned_to"
+            render={({ field }) => <AssignedUserSelect value={field.value} onChange={field.onChange} onBlur={field.onBlur} error={errors.assigned_to?.message} />}
+          />
+          {fieldError(errors.assigned_to?.message)}
+        </label>
+      ) : null}
       <label className="text-sm font-medium">{required("Full name")}<Input className={`mt-2 ${errorClass(errors.full_name?.message) ?? ""}`} placeholder="Maya Chen" {...form.register("full_name")} />{fieldError(errors.full_name?.message)}</label>
       <label className="text-sm font-medium">
         {required("Company")}

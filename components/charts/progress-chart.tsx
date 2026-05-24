@@ -19,7 +19,7 @@ export function ProgressChart({ data }: { data: DashboardMetrics["pipelineProgre
         </ResponsiveContainer>
         <div className="absolute inset-0 flex flex-col items-center justify-center">
           <span className="text-5xl font-semibold">41%</span>
-          <span className="mt-1 text-sm text-muted">Pipeline Won</span>
+          <span className="mt-1 text-sm text-muted">Deals won</span>
         </div>
       </div>
       <div className="flex flex-wrap justify-center gap-5 text-sm text-muted">

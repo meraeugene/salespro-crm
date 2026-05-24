@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import {
   Bell,
   Building2,
@@ -42,6 +42,7 @@ import {
   useCompanies,
   useContacts,
   useLeads,
+  useMe,
   useMetrics,
   useNotes,
 } from "@/hooks/use-crm";
@@ -55,7 +56,9 @@ export function LeadsPageClient() {
   const [editingLead, setEditingLead] = useState<Lead | null>(null);
   const [deletingLead, setDeletingLead] = useState<Lead | null>(null);
   const { data, isLoading } = useLeads();
+  const { data: me } = useMe();
   const { mutate } = useSWRConfig();
+  const isManager = me?.role === "sales_manager";
 
   async function handleDeleteLead(id: string) {
     try {
@@ -78,12 +81,14 @@ export function LeadsPageClient() {
             Leads are potential buyers or opportunities you are still qualifying. Assign a sales rep, update status, and turn qualified interest into a deal.
           </p>
         </div>
-        <Button onClick={() => setOpen(true)}>
-          <Plus className="h-4 w-4" />
-          Add Lead
-        </Button>
+        {isManager ? (
+          <Button onClick={() => setOpen(true)}>
+            <Plus className="h-4 w-4" />
+            Add Lead
+          </Button>
+        ) : null}
       </div>
-      <LeadsTable leads={data} isLoading={isLoading} onEdit={setEditingLead} onDelete={setDeletingLead} />
+      <LeadsTable leads={data} isLoading={isLoading} onEdit={setEditingLead} onDelete={isManager ? setDeletingLead : undefined} />
       <Modal open={open} title="Create lead" onClose={() => setOpen(false)}>
         <LeadForm onDone={() => setOpen(false)} />
       </Modal>
@@ -163,6 +168,8 @@ export function AnalyticsPageClient() {
 export function ContactsPageClient() {
   const [open, setOpen] = useState(false);
   const { data, isLoading } = useContacts();
+  const { data: me } = useMe();
+  const isManager = me?.role === "sales_manager";
   return (
     <>
       <SimpleList
@@ -171,7 +178,8 @@ export function ContactsPageClient() {
         subtitle="Contacts are known stakeholders tied to companies. Keep decision-makers and long-term buyer details organized here."
         data={data}
         isLoading={isLoading}
-        onAdd={() => setOpen(true)}
+        onAdd={isManager ? () => setOpen(true) : undefined}
+        canDeleteRecords={isManager}
       />
       <Modal open={open} title="Create contact" onClose={() => setOpen(false)}>
         <ContactForm onDone={() => setOpen(false)} />
@@ -276,6 +284,7 @@ export function SimpleList({
   isLoading,
   onAdd,
   onClear,
+  canDeleteRecords,
 }: {
   resource: "companies" | "contacts" | "tasks" | "notes" | "notifications";
   title: string;
@@ -284,14 +293,17 @@ export function SimpleList({
   isLoading?: boolean;
   onAdd?: () => void;
   onClear?: () => void;
+  canDeleteRecords?: boolean;
 }) {
   const { mutate } = useSWRConfig();
+  const globalSearch = useUiStore((state) => state.search);
   const canDelete =
-    resource === "companies" ||
-    resource === "contacts" ||
-    resource === "tasks" ||
-    resource === "notes" ||
-    resource === "notifications";
+    (canDeleteRecords ?? true) &&
+    (resource === "companies" ||
+      resource === "contacts" ||
+      resource === "tasks" ||
+      resource === "notes" ||
+      resource === "notifications");
   const [editingItem, setEditingItem] = useState<Record<
     string,
     unknown
@@ -301,6 +313,22 @@ export function SimpleList({
     unknown
   > | null>(null);
   const [confirmingClear, setConfirmingClear] = useState(false);
+  const visibleData = useMemo(() => {
+    const items = data ?? [];
+    const terms = globalSearch.toLowerCase().split(/\s+/).filter(Boolean);
+    if (!terms.length) return items;
+    return items.filter((item) => {
+      const haystack = Object.values(item)
+        .map((value) => {
+          if (value === null || value === undefined) return "";
+          if (typeof value === "object") return JSON.stringify(value);
+          return String(value);
+        })
+        .join(" ")
+        .toLowerCase();
+      return terms.every((term) => haystack.includes(term));
+    });
+  }, [data, globalSearch]);
 
   async function handleDelete(id: string) {
     try {
@@ -437,7 +465,7 @@ export function SimpleList({
         <CardContent>
           {isLoading ? (
             <ResourceSkeletonGrid resource={resource} />
-          ) : data?.length ? (
+          ) : visibleData.length ? (
             <div
               className={
                 resource === "companies" ||
@@ -445,10 +473,12 @@ export function SimpleList({
                 resource === "tasks" ||
                 resource === "notes"
                   ? "grid gap-4 md:grid-cols-2 xl:grid-cols-3"
+                  : resource === "notifications"
+                    ? "space-y-2"
                   : "divide-y divide-border"
               }
             >
-              {data.map((item, index) => (
+              {visibleData.map((item, index) => (
                 <ResourceItem
                   key={String(item.id ?? index)}
                   resource={resource}
@@ -840,6 +870,10 @@ function ResourceItem({
             {String(item.phone ?? "No phone")}
           </div>
           <div className="flex items-center gap-2">
+            <UsersRound className="h-4 w-4" />
+            Assigned sales rep: {String(item.assigned_user ?? "Unassigned")}
+          </div>
+          <div className="flex items-center gap-2">
             <CalendarDays className="h-4 w-4" />
             Added {shortDate(String(item.created_at ?? ""))}
           </div>
@@ -887,6 +921,10 @@ function ResourceItem({
         <div className="mt-5 flex items-center gap-2 border-t border-border pt-4 text-sm text-muted">
           <CalendarDays className="h-4 w-4" />
           Due {shortDate(String(item.due_date ?? item.created_at ?? ""))}
+        </div>
+        <div className="mt-2 flex items-center gap-2 text-sm text-muted">
+          <UsersRound className="h-4 w-4" />
+          Assigned sales rep: {String(item.assigned_user ?? "Unassigned")}
         </div>
       </div>
     );
@@ -942,7 +980,7 @@ function ResourceItem({
           }
         }}
         className={`flex w-full cursor-pointer flex-col gap-4 text-left transition md:flex-row md:items-center md:justify-between ${
-          isRead ? "py-5 opacity-75" : "rounded-lg bg-blue-50/70 px-4 py-5 hover:bg-blue-50"
+          isRead ? "rounded-xl border border-transparent px-5 py-5 opacity-75 hover:bg-slate-50" : "rounded-xl border border-blue-100 bg-blue-50/80 px-5 py-5 shadow-[0_10px_26px_rgba(37,99,235,0.08)] hover:bg-blue-50"
         }`}
       >
         <div className="flex min-w-0 items-start gap-4">

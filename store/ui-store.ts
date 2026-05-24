@@ -8,6 +8,7 @@ type UiState = {
   search: string;
   readActivityIds: string[];
   toggleSidebar: () => void;
+  setSidebarCollapsed: (collapsed: boolean) => void;
   setSearch: (search: string) => void;
   markActivityRead: (id: string) => void;
   clearActivityReads: () => void;
@@ -16,10 +17,11 @@ type UiState = {
 export const useUiStore = create<UiState>()(
   persist(
     (set) => ({
-      sidebarCollapsed: false,
+      sidebarCollapsed: true,
       search: "",
       readActivityIds: [],
       toggleSidebar: () => set((state) => ({ sidebarCollapsed: !state.sidebarCollapsed })),
+      setSidebarCollapsed: (collapsed) => set({ sidebarCollapsed: collapsed }),
       setSearch: (search) => set({ search }),
       markActivityRead: (id) =>
         set((state) => ({

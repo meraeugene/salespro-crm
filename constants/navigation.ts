@@ -37,7 +37,7 @@ export const navSections: NavSection[] = [
   {
     label: "Sales",
     items: [
-      { label: "Companies", href: "/companies", icon: Building2, roles: ["sales_manager", "sales_representative"] },
+      { label: "Companies", href: "/companies", icon: Building2, roles: ["sales_manager"] },
       { label: "Leads", href: "/leads", icon: Users, roles: ["sales_manager", "sales_representative"] },
       { label: "Deals", href: "/deals", icon: BriefcaseBusiness, roles: ["sales_manager", "sales_representative"] },
       { label: "Contacts", href: "/contacts", icon: NotebookPen, roles: ["sales_manager", "sales_representative"] },

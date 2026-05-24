@@ -15,14 +15,14 @@ export const permissions = {
 export const routeAccess: Record<string, Role[]> = {
   "/dashboard": ["sales_manager", "sales_representative"],
   "/activities": ["sales_manager", "sales_representative"],
-  "/companies": ["sales_manager", "sales_representative"],
+  "/companies": ["sales_manager"],
   "/notes": ["sales_manager", "sales_representative"],
   "/tasks": ["sales_manager", "sales_representative"],
   "/leads": ["sales_manager", "sales_representative"],
   "/deals": ["sales_manager", "sales_representative"],
   "/contacts": ["sales_manager", "sales_representative"],
   "/analytics": ["sales_manager"],
-  "/team": ["admin", "sales_manager"],
+  "/team": ["admin"],
   "/settings": ["admin", "sales_manager", "sales_representative"],
 };
 

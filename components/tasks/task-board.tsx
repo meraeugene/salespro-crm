@@ -15,7 +15,7 @@ import {
 } from "@dnd-kit/core";
 import { arrayMove, SortableContext, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { CalendarDays, CheckCircle2, CheckSquare, Loader2, MoreHorizontal, Pencil, Plus, Trash2 } from "lucide-react";
+import { CalendarDays, CheckCircle2, CheckSquare, Loader2, MoreHorizontal, Pencil, Plus, Trash2, UsersRound } from "lucide-react";
 import { useSWRConfig } from "swr";
 import { toast } from "sonner";
 import { TaskForm } from "@/components/forms/resource-forms";
@@ -27,6 +27,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useTasks } from "@/hooks/use-crm";
 import { shortDate } from "@/lib/utils";
 import { mutateJson } from "@/services/fetcher";
+import { useUiStore } from "@/store/ui-store";
 import type { Task, TaskStatus } from "@/types/crm";
 
 const columns: Array<{ id: TaskStatus; label: string }> = [
@@ -50,6 +51,7 @@ function columnTone(status: TaskStatus) {
 export function TaskBoard({ onAdd }: { onAdd: () => void }) {
   const { data, isLoading } = useTasks();
   const { mutate } = useSWRConfig();
+  const globalSearch = useUiStore((state) => state.search);
   const [optimisticTasks, setOptimisticTasks] = useState<Task[] | null>(null);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [activeWidth, setActiveWidth] = useState<number | null>(null);
@@ -59,7 +61,15 @@ export function TaskBoard({ onAdd }: { onAdd: () => void }) {
   const [deletingTask, setDeletingTask] = useState<Task | null>(null);
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
 
-  const tasks = useMemo(() => optimisticTasks ?? data ?? [], [data, optimisticTasks]);
+  const tasks = useMemo(() => {
+    const items = optimisticTasks ?? data ?? [];
+    const terms = globalSearch.toLowerCase().split(/\s+/).filter(Boolean);
+    if (!terms.length) return items;
+    return items.filter((task) => {
+      const haystack = `${task.title} ${task.description ?? ""} ${task.status} ${task.assigned_user ?? ""}`.toLowerCase();
+      return terms.every((term) => haystack.includes(term));
+    });
+  }, [data, globalSearch, optimisticTasks]);
 
   const grouped = useMemo(
     () =>
@@ -268,7 +278,6 @@ function TaskColumn({
       <div className="mb-3 flex items-center justify-between">
         <div>
           <h3 className="font-semibold">{label}</h3>
-          <p className="text-xs text-muted">{tasks.length} tasks</p>
         </div>
         <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${statusTone(id)}`}>{tasks.length}</span>
       </div>
@@ -393,6 +402,10 @@ function TaskCardContent({ task, updating }: { task: Task; updating: boolean }) 
       <div className="mt-4 flex items-center gap-2 border-t border-border pt-3 text-sm text-muted">
         <CalendarDays className="h-4 w-4" />
         Due {shortDate(task.due_date ?? task.created_at)}
+      </div>
+      <div className="mt-2 flex items-center gap-2 text-sm text-muted">
+        <UsersRound className="h-4 w-4" />
+        {task.assigned_user ?? "Unassigned"}
       </div>
       {updating ? (
         <p className="mt-2 inline-flex items-center gap-1.5 text-xs font-medium text-primary">

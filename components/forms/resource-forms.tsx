@@ -14,6 +14,7 @@ import { PhoneField } from "@/components/forms/phone-field";
 import { Button } from "@/components/ui/button";
 import { Input, Select, Textarea } from "@/components/ui/input";
 import { StatusBadge } from "@/components/ui/status-badge";
+import { useMe } from "@/hooks/use-crm";
 import { mutateJson } from "@/services/fetcher";
 import { companySchema, contactSchema, dealSchema, noteSchema, taskSchema } from "@/validations/crm";
 
@@ -89,6 +90,8 @@ export function CompanyForm({ onDone, initialValues, id, mode = "create" }: { on
 
 export function ContactForm({ onDone, initialValues, id, mode = "create" }: { onDone?: () => void; initialValues?: Partial<z.input<typeof contactSchema>>; id?: string; mode?: FormMode }) {
   const { mutate } = useSWRConfig();
+  const { data: me } = useMe();
+  const canAssign = me?.role === "sales_manager";
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [avatarUrl, setAvatarUrl] = useState(initialValues?.avatar_url ?? "");
   const form = useForm<z.input<typeof contactSchema>>({ resolver: zodResolver(contactSchema), defaultValues: { full_name: initialValues?.full_name ?? "", company: initialValues?.company ?? "", email: initialValues?.email ?? "", phone: initialValues?.phone ?? "", title: initialValues?.title ?? "", avatar_url: initialValues?.avatar_url ?? "", assigned_to: initialValues?.assigned_to ?? null } });
@@ -107,6 +110,7 @@ export function ContactForm({ onDone, initialValues, id, mode = "create" }: { on
   async function onSubmit(values: z.input<typeof contactSchema>) {
     try {
       const payload = { ...values, avatar_url: avatarUrl };
+      if (!canAssign) delete payload.assigned_to;
       const saved = await mutateJson<Record<string, unknown>>("/api/contacts", mode === "edit" ? "PATCH" : "POST", mode === "edit" ? { ...payload, id } : payload);
       await mutate("/api/contacts", (current: Array<Record<string, unknown>> | undefined) => updateResourceCache(current, saved, mode), { revalidate: true });
       toast.success(mode === "edit" ? "Contact updated." : "Contact saved.");
@@ -137,15 +141,17 @@ export function ContactForm({ onDone, initialValues, id, mode = "create" }: { on
           <input ref={fileInputRef} type="file" accept="image/*" className="sr-only" onChange={handleAvatarChange} />
         </div>
       </div>
-      <label className="text-sm font-medium md:col-span-2">
-        Assigned sales rep
-        <Controller
-          control={form.control}
-          name="assigned_to"
-          render={({ field }) => <AssignedUserSelect value={field.value} onChange={field.onChange} onBlur={field.onBlur} error={errors.assigned_to?.message} />}
-        />
-        <FieldError message={errors.assigned_to?.message} />
-      </label>
+      {canAssign ? (
+        <label className="text-sm font-medium md:col-span-2">
+          Assigned sales rep
+          <Controller
+            control={form.control}
+            name="assigned_to"
+            render={({ field }) => <AssignedUserSelect value={field.value} onChange={field.onChange} onBlur={field.onBlur} error={errors.assigned_to?.message} />}
+          />
+          <FieldError message={errors.assigned_to?.message} />
+        </label>
+      ) : null}
       <label className="text-sm font-medium"><Required>Full name</Required><Input className={`mt-2 ${errorClass(errors.full_name?.message)}`} placeholder="Maya Chen" {...form.register("full_name")} /><FieldError message={errors.full_name?.message} /></label>
       <label className="text-sm font-medium">
         <Required>Company</Required>
@@ -174,10 +180,14 @@ export function ContactForm({ onDone, initialValues, id, mode = "create" }: { on
 
 export function TaskForm({ onDone, initialValues, id, mode = "create" }: { onDone?: () => void; initialValues?: Partial<z.input<typeof taskSchema>>; id?: string; mode?: FormMode }) {
   const { mutate } = useSWRConfig();
+  const { data: me } = useMe();
+  const canAssign = me?.role === "sales_manager";
   const form = useForm<z.input<typeof taskSchema>>({ resolver: zodResolver(taskSchema), defaultValues: { title: initialValues?.title ?? "", description: initialValues?.description ?? "", status: initialValues?.status ?? "Todo", due_date: initialValues?.due_date ?? "", assigned_to: initialValues?.assigned_to ?? null } });
   async function onSubmit(values: z.input<typeof taskSchema>) {
     try {
-      const saved = await mutateJson<Record<string, unknown>>("/api/tasks", mode === "edit" ? "PATCH" : "POST", mode === "edit" ? { ...values, id } : values);
+      const payload = { ...values };
+      if (!canAssign) delete payload.assigned_to;
+      const saved = await mutateJson<Record<string, unknown>>("/api/tasks", mode === "edit" ? "PATCH" : "POST", mode === "edit" ? { ...payload, id } : payload);
       await mutate("/api/tasks", (current: Array<Record<string, unknown>> | undefined) => updateResourceCache(current, saved, mode), { revalidate: true });
       toast.success(mode === "edit" ? "Task updated." : "Task saved.");
       onDone?.();
@@ -189,15 +199,17 @@ export function TaskForm({ onDone, initialValues, id, mode = "create" }: { onDon
   const watchedStatus = form.watch("status");
   return (
     <form className="grid gap-4 md:grid-cols-2" noValidate onSubmit={form.handleSubmit(onSubmit)}>
-      <label className="text-sm font-medium md:col-span-2">
-        Assigned sales rep
-        <Controller
-          control={form.control}
-          name="assigned_to"
-          render={({ field }) => <AssignedUserSelect value={field.value} onChange={field.onChange} onBlur={field.onBlur} error={errors.assigned_to?.message} />}
-        />
-        <FieldError message={errors.assigned_to?.message} />
-      </label>
+      {canAssign ? (
+        <label className="text-sm font-medium md:col-span-2">
+          Assigned sales rep
+          <Controller
+            control={form.control}
+            name="assigned_to"
+            render={({ field }) => <AssignedUserSelect value={field.value} onChange={field.onChange} onBlur={field.onBlur} error={errors.assigned_to?.message} />}
+          />
+          <FieldError message={errors.assigned_to?.message} />
+        </label>
+      ) : null}
       <label className="text-sm font-medium md:col-span-2"><Required>Title</Required><Input className={`mt-2 ${errorClass(errors.title?.message)}`} placeholder="Follow up with Maya" {...form.register("title")} /><FieldError message={errors.title?.message} /></label>
       <label className="text-sm font-medium">
         <div className="flex items-center justify-between gap-3">
@@ -221,6 +233,8 @@ export function TaskForm({ onDone, initialValues, id, mode = "create" }: { onDon
 
 export function DealForm({ onDone, initialValues, id, mode = "create" }: { onDone?: () => void; initialValues?: Partial<z.input<typeof dealSchema>>; id?: string; mode?: FormMode }) {
   const { mutate } = useSWRConfig();
+  const { data: me } = useMe();
+  const canAssign = me?.role === "sales_manager";
   const form = useForm<z.input<typeof dealSchema>>({
     resolver: zodResolver(dealSchema),
     defaultValues: {
@@ -234,7 +248,9 @@ export function DealForm({ onDone, initialValues, id, mode = "create" }: { onDon
   });
   async function onSubmit(values: z.input<typeof dealSchema>) {
     try {
-      const saved = await mutateJson<Record<string, unknown>>("/api/deals", mode === "edit" ? "PATCH" : "POST", mode === "edit" ? { ...values, id } : values);
+      const payload = { ...values };
+      if (!canAssign) delete payload.assigned_to;
+      const saved = await mutateJson<Record<string, unknown>>("/api/deals", mode === "edit" ? "PATCH" : "POST", mode === "edit" ? { ...payload, id } : payload);
       await mutate("/api/deals", (current: Array<Record<string, unknown>> | undefined) => updateResourceCache(current, saved, mode), { revalidate: true });
       toast.success(mode === "edit" ? "Deal updated." : "Deal saved.");
       onDone?.();
@@ -246,15 +262,17 @@ export function DealForm({ onDone, initialValues, id, mode = "create" }: { onDon
   const watchedStage = form.watch("stage");
   return (
     <form className="grid gap-4 md:grid-cols-2" noValidate onSubmit={form.handleSubmit(onSubmit)}>
-      <label className="text-sm font-medium md:col-span-2">
-        Assigned sales rep
-        <Controller
-          control={form.control}
-          name="assigned_to"
-          render={({ field }) => <AssignedUserSelect value={field.value} onChange={field.onChange} onBlur={field.onBlur} error={errors.assigned_to?.message} />}
-        />
-        <FieldError message={errors.assigned_to?.message} />
-      </label>
+      {canAssign ? (
+        <label className="text-sm font-medium md:col-span-2">
+          Assigned sales rep
+          <Controller
+            control={form.control}
+            name="assigned_to"
+            render={({ field }) => <AssignedUserSelect value={field.value} onChange={field.onChange} onBlur={field.onBlur} error={errors.assigned_to?.message} />}
+          />
+          <FieldError message={errors.assigned_to?.message} />
+        </label>
+      ) : null}
       <label className="text-sm font-medium md:col-span-2"><Required>Deal name</Required><Input className={`mt-2 ${errorClass(errors.title?.message)}`} placeholder="Acme Sales Hub" {...form.register("title")} /><FieldError message={errors.title?.message} /></label>
       <label className="text-sm font-medium">
         <Required>Company</Required>

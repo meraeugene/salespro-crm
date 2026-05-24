@@ -9,9 +9,11 @@ const salesRoles = ["sales_manager", "sales_representative"] as const;
 
 export async function GET() {
   if (!hasSupabaseEnv()) return NextResponse.json(notes);
-  const { supabase, error } = await requireRole([...salesRoles]);
+  const { supabase, user, profile, error } = await requireRole([...salesRoles]);
   if (error) return error;
-  const { data, error: dbError } = await supabase.from("notes").select("*").order("created_at", { ascending: false });
+  let query = supabase.from("notes").select("*").order("created_at", { ascending: false });
+  if (profile?.role === "sales_representative") query = query.eq("created_by", user.id);
+  const { data, error: dbError } = await query;
   if (dbError) return handleError(dbError);
   return NextResponse.json(data);
 }
@@ -35,14 +37,16 @@ export async function DELETE(request: Request) {
   const { id } = await request.json();
   if (!id || typeof id !== "string") return NextResponse.json({ error: "Missing note id." }, { status: 400 });
   if (!hasSupabaseEnv()) return NextResponse.json({ ok: true });
-  const { supabase, error } = await requireRole([...salesRoles]);
+  const { supabase, user, profile, error } = await requireRole([...salesRoles]);
   if (error) return error;
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const writeClient = serviceRoleKey && supabaseUrl
     ? createSupabaseAdmin(supabaseUrl, serviceRoleKey, { auth: { persistSession: false, autoRefreshToken: false } })
     : supabase;
-  const { error: dbError } = await writeClient.from("notes").delete().eq("id", id);
+  let query = writeClient.from("notes").delete().eq("id", id);
+  if (profile?.role === "sales_representative") query = query.eq("created_by", user.id);
+  const { error: dbError } = await query;
   if (dbError) return handleError(dbError);
   return NextResponse.json({ ok: true });
 }
@@ -52,7 +56,7 @@ export async function PATCH(request: Request) {
   const parsed = noteSchema.partial().extend({ id: z.string().min(1) }).safeParse(body);
   if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   if (!hasSupabaseEnv()) return NextResponse.json({ ...body, updated_at: new Date().toISOString() });
-  const { supabase, error } = await requireRole([...salesRoles]);
+  const { supabase, user, profile, error } = await requireRole([...salesRoles]);
   if (error) return error;
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -60,7 +64,9 @@ export async function PATCH(request: Request) {
     ? createSupabaseAdmin(supabaseUrl, serviceRoleKey, { auth: { persistSession: false, autoRefreshToken: false } })
     : supabase;
   const { id, ...updates } = parsed.data;
-  const { data, error: dbError } = await writeClient.from("notes").update(updates).eq("id", id).select().single();
+  let query = writeClient.from("notes").update(updates).eq("id", id);
+  if (profile?.role === "sales_representative") query = query.eq("created_by", user.id);
+  const { data, error: dbError } = await query.select().single();
   if (dbError) return handleError(dbError);
   return NextResponse.json(data);
 }

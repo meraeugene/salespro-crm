@@ -28,13 +28,13 @@ export const leadSchema = z.object({
 });
 
 export const dealSchema = z.object({
-  title: z.string().min(2),
-  company: z.string().min(2),
-  value: z.coerce.number().nonnegative(),
-  probability: z.coerce.number().min(0).max(100).optional(),
-  stage: z.enum(["New Lead", "Contacted", "Qualified", "Proposal Sent", "Negotiation", "Won", "Lost"]),
+  title: z.string().trim().min(2, "Enter a deal name."),
+  company: z.string().trim().min(2, "Select a company."),
+  value: z.coerce.number({ error: "Enter a deal value." }).nonnegative("Deal value cannot be negative."),
+  probability: z.coerce.number().min(0, "Probability cannot be below 0%.").max(100, "Probability cannot be above 100%.").optional(),
+  stage: z.enum(["New Lead", "Contacted", "Qualified", "Proposal Sent", "Negotiation", "Won", "Lost"], { error: "Choose a deal stage." }),
   assigned_to: z.string().uuid().optional().nullable(),
-  expected_close_date: z.string(),
+  expected_close_date: z.string().min(1, "Choose an expected close date."),
 });
 
 export const taskSchema = z.object({

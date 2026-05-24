@@ -34,19 +34,25 @@ export async function GET() {
   };
   if (!hasSupabaseEnv()) return NextResponse.json(emptyMetrics);
 
-  const { supabase, error } = await requireRole(["sales_manager", "sales_representative"]);
+  const { supabase, user, profile, error } = await requireRole(["sales_manager", "sales_representative"]);
   if (error) return error;
 
   try {
+    let dealsQuery = supabase
+      .from("deals")
+      .select("id, value, stage, assigned_to, expected_close_date, created_at, profiles:assigned_to(full_name)")
+      .order("created_at", { ascending: true });
+    let leadsQuery = supabase
+      .from("leads")
+      .select("id, status, lead_source, created_at, assigned_to, profiles:assigned_to(full_name)")
+      .order("created_at", { ascending: true });
+    if (profile?.role === "sales_representative") {
+      dealsQuery = dealsQuery.eq("assigned_to", user.id);
+      leadsQuery = leadsQuery.eq("assigned_to", user.id);
+    }
     const [{ data: deals, error: dealsError }, { data: leads, error: leadsError }] = await Promise.all([
-      supabase
-        .from("deals")
-        .select("id, value, stage, assigned_to, expected_close_date, created_at, profiles:assigned_to(full_name)")
-        .order("created_at", { ascending: true }),
-      supabase
-        .from("leads")
-        .select("id, status, lead_source, created_at, assigned_to, profiles:assigned_to(full_name)")
-        .order("created_at", { ascending: true }),
+      dealsQuery,
+      leadsQuery,
     ]);
 
     if (dealsError) throw dealsError;

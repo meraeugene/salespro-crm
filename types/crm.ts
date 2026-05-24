@@ -54,6 +54,7 @@ export type Contact = {
   title?: string | null;
   avatar_url?: string | null;
   assigned_to?: string | null;
+  assigned_user?: string | null;
   created_at: string;
 };
 
@@ -79,6 +80,7 @@ export type Task = {
   related_type?: string | null;
   related_id?: string | null;
   assigned_to?: string | null;
+  assigned_user?: string | null;
   created_at: string;
 };
 

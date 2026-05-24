@@ -174,34 +174,59 @@ create policy "profiles read authenticated" on public.profiles for select to aut
 create policy "profiles update own or admin" on public.profiles for update to authenticated using (id = auth.uid() or public.is_admin());
 
 create policy "companies read sales users" on public.companies for select to authenticated using (public.is_sales_user());
-create policy "companies write sales users" on public.companies for all to authenticated using (public.is_sales_user()) with check (public.is_sales_user());
+create policy "companies insert managers" on public.companies for insert to authenticated with check (public.is_manager());
+create policy "companies update managers" on public.companies for update to authenticated using (public.is_manager()) with check (public.is_manager());
+create policy "companies delete managers" on public.companies for delete to authenticated using (public.is_manager());
 
 create policy "leads read by role" on public.leads for select to authenticated using (
-  public.is_sales_user()
+  public.is_manager() or assigned_to = auth.uid()
 );
-create policy "leads write by owner manager" on public.leads for all to authenticated using (
-  public.is_sales_user()
-) with check (public.is_sales_user());
+create policy "leads insert managers" on public.leads for insert to authenticated with check (public.is_manager());
+create policy "leads update managers or assigned reps" on public.leads for update to authenticated using (
+  public.is_manager() or assigned_to = auth.uid()
+) with check (public.is_manager() or assigned_to = auth.uid());
+create policy "leads delete managers" on public.leads for delete to authenticated using (public.is_manager());
 
 create policy "contacts read by role" on public.contacts for select to authenticated using (
-  public.is_sales_user()
+  public.is_manager() or assigned_to = auth.uid()
 );
-create policy "contacts write by owner manager" on public.contacts for all to authenticated using (
-  public.is_sales_user()
-) with check (public.is_sales_user());
+create policy "contacts insert managers" on public.contacts for insert to authenticated with check (public.is_manager());
+create policy "contacts update managers or assigned reps" on public.contacts for update to authenticated using (
+  public.is_manager() or assigned_to = auth.uid()
+) with check (public.is_manager() or assigned_to = auth.uid());
+create policy "contacts delete managers" on public.contacts for delete to authenticated using (public.is_manager());
 
 create policy "deals read by role" on public.deals for select to authenticated using (
-  public.is_sales_user()
+  public.is_manager() or assigned_to = auth.uid()
 );
-create policy "deals write by owner manager" on public.deals for all to authenticated using (
-  public.is_sales_user()
-) with check (public.is_sales_user());
+create policy "deals insert managers" on public.deals for insert to authenticated with check (public.is_manager());
+create policy "deals update managers or assigned reps" on public.deals for update to authenticated using (
+  public.is_manager() or assigned_to = auth.uid()
+) with check (public.is_manager() or assigned_to = auth.uid());
+create policy "deals delete managers" on public.deals for delete to authenticated using (public.is_manager());
 
-create policy "tasks read sales users" on public.tasks for select to authenticated using (public.is_sales_user());
-create policy "tasks write sales users" on public.tasks for all to authenticated using (public.is_sales_user()) with check (public.is_sales_user());
+create policy "tasks read by role" on public.tasks for select to authenticated using (public.is_manager() or assigned_to = auth.uid());
+create policy "tasks insert managers or assigned reps" on public.tasks for insert to authenticated with check (
+  public.is_manager() or (created_by = auth.uid() and assigned_to = auth.uid())
+);
+create policy "tasks update managers or assigned reps" on public.tasks for update to authenticated using (
+  public.is_manager() or assigned_to = auth.uid()
+) with check (public.is_manager() or assigned_to = auth.uid());
+create policy "tasks delete managers or assigned reps" on public.tasks for delete to authenticated using (
+  public.is_manager() or assigned_to = auth.uid()
+);
 
-create policy "notes read sales users" on public.notes for select to authenticated using (public.is_sales_user());
+create policy "notes read by role" on public.notes for select to authenticated using (public.is_manager() or created_by = auth.uid());
 create policy "notes write sales users" on public.notes for insert to authenticated with check (public.is_sales_user() and created_by = auth.uid());
+create policy "notes update managers or authors" on public.notes for update to authenticated using (
+  public.is_manager() or created_by = auth.uid()
+) with check (public.is_manager() or created_by = auth.uid());
+create policy "notes delete managers or authors" on public.notes for delete to authenticated using (
+  public.is_manager() or created_by = auth.uid()
+);
 
-create policy "activities read sales users" on public.activities for select to authenticated using (public.is_sales_user());
+create policy "activities read by role" on public.activities for select to authenticated using (public.is_manager() or created_by = auth.uid());
 create policy "activities write sales users" on public.activities for insert to authenticated with check (public.is_sales_user() and created_by = auth.uid());
+create policy "activities delete managers or authors" on public.activities for delete to authenticated using (
+  public.is_manager() or created_by = auth.uid()
+);

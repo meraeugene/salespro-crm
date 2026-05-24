@@ -2,14 +2,12 @@ import { NextResponse } from "next/server";
 import { handleError, hasSupabaseEnv, requireRole } from "@/lib/api";
 import { profiles } from "@/lib/mock-data";
 
-const salesRoles = ["sales_manager", "sales_representative"] as const;
-
 export async function GET() {
   if (!hasSupabaseEnv()) {
     return NextResponse.json(profiles.filter((profile) => profile.role === "sales_representative"));
   }
 
-  const { supabase, error } = await requireRole([...salesRoles]);
+  const { supabase, error } = await requireRole(["sales_manager"]);
   if (error) return error;
 
   const { data, error: dbError } = await supabase
@@ -21,4 +19,3 @@ export async function GET() {
   if (dbError) return handleError(dbError);
   return NextResponse.json(data);
 }
-
