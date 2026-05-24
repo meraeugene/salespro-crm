@@ -7,9 +7,12 @@ import {
   DndContext,
   DragOverlay,
   PointerSensor,
+  pointerWithin,
+  rectIntersection,
   useDroppable,
   useSensor,
   useSensors,
+  type CollisionDetection,
   type DragEndEvent,
   type DragOverEvent,
   type DragStartEvent,
@@ -37,6 +40,21 @@ const columns: Array<{ id: "new" | "qualified" | "proposal" | "won" | "lost"; la
   { id: "won", label: "Won", dropStage: "Won", stages: ["Won"] },
   { id: "lost", label: "Lost", dropStage: "Lost", stages: ["Lost"] },
 ];
+
+const columnIds = new Set<string>(columns.map((column) => column.id));
+
+const pipelineCollisionDetection: CollisionDetection = (args) => {
+  const pointerCollisions = pointerWithin(args);
+  if (pointerCollisions.length > 0) {
+    const dealCollision = pointerCollisions.find((collision) => !columnIds.has(String(collision.id)));
+    return dealCollision ? [dealCollision] : pointerCollisions;
+  }
+
+  const intersectingColumns = rectIntersection(args).filter((collision) => columnIds.has(String(collision.id)));
+  if (intersectingColumns.length > 0) return intersectingColumns;
+
+  return closestCorners(args);
+};
 
 function columnForStage(stage: DealStage) {
   return columns.find((column) => column.stages.includes(stage)) ?? columns[0];
@@ -70,6 +88,7 @@ export function PipelineBoard() {
   const [createOpen, setCreateOpen] = useState(false);
   const [editingDeal, setEditingDeal] = useState<Deal | null>(null);
   const [deletingDeal, setDeletingDeal] = useState<Deal | null>(null);
+  const [deletePending, setDeletePending] = useState(false);
   const isManager = me?.role === "sales_manager";
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
   const localDeals = useMemo(() => {
@@ -127,6 +146,7 @@ export function PipelineBoard() {
       revalidate: true,
       rollbackOnError: true,
     });
+      await Promise.all([mutate("/api/leads"), mutate("/api/metrics")]);
     } finally {
     setOptimisticDeals(null);
     setUpdating(null);
@@ -134,6 +154,7 @@ export function PipelineBoard() {
   }
 
   async function handleDeleteDeal(id: string) {
+    setDeletePending(true);
     try {
       await mutateJson("/api/deals", "DELETE", { id });
       await mutate("/api/deals", (current: Deal[] | undefined) => current?.filter((deal) => deal.id !== id), { revalidate: false });
@@ -142,6 +163,8 @@ export function PipelineBoard() {
       setDeletingDeal(null);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Unable to delete deal.");
+    } finally {
+      setDeletePending(false);
     }
   }
 
@@ -157,7 +180,7 @@ export function PipelineBoard() {
           </Button>
         </div>
       ) : null}
-      <DndContext sensors={sensors} collisionDetection={closestCorners} onDragStart={handleDragStart} onDragOver={handleDragOver} onDragEnd={handleDragEnd} onDragCancel={() => { setActiveId(null); setOverId(null); }}>
+      <DndContext sensors={sensors} collisionDetection={pipelineCollisionDetection} onDragStart={handleDragStart} onDragOver={handleDragOver} onDragEnd={handleDragEnd} onDragCancel={() => { setActiveId(null); setOverId(null); }}>
         <div className="grid min-h-[500px] grid-cols-1 gap-3 overflow-x-auto pb-2 md:grid-cols-2 xl:grid-cols-5">
           {grouped.map((column) => (
             <PipelineColumn key={column.id} id={column.id} label={column.label} deals={column.deals} updating={updating} activeId={activeId} overId={overId} onEdit={setEditingDeal} onDelete={isManager ? setDeletingDeal : undefined} />
@@ -200,9 +223,11 @@ export function PipelineBoard() {
               type="button"
               variant="danger"
               className="bg-red-600 text-white hover:bg-red-700"
+              disabled={deletePending}
               onClick={() => (deletingDeal?.id ? handleDeleteDeal(deletingDeal.id) : null)}
             >
-              Delete
+              {deletePending ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+              {deletePending ? "Deleting..." : "Delete"}
             </Button>
           </div>
         </div>
@@ -343,12 +368,12 @@ function DealCardContent({ deal, updating, dragOverlay = false, actions }: { dea
         <div className="min-w-0 flex-1">
           <h4 className="line-clamp-2 text-sm font-semibold">{deal.title}</h4>
           <p className="mt-1 truncate text-xs text-muted">{deal.company}</p>
-          <div className="mt-3 flex items-center justify-between gap-3 text-xs">
-            <span className="font-semibold">{currency(deal.value)}</span>
-            <span className="text-muted">{deal.probability}% close</span>
-          </div>
         </div>
         {actions}
+      </div>
+      <div className="mt-3 flex w-full items-center justify-between gap-3 text-xs">
+        <span className="font-semibold">{currency(deal.value)}</span>
+        <span className="text-muted">{deal.probability}% close</span>
       </div>
       <div className="mt-3 space-y-1.5 border-t border-border pt-3 text-xs text-muted">
         <div className="flex items-center justify-between gap-2">

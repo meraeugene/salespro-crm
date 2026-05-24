@@ -59,6 +59,7 @@ export function TaskBoard({ onAdd }: { onAdd: () => void }) {
   const [updating, setUpdating] = useState<string | null>(null);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [deletingTask, setDeletingTask] = useState<Task | null>(null);
+  const [deletePending, setDeletePending] = useState(false);
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
 
   const tasks = useMemo(() => {
@@ -132,6 +133,7 @@ export function TaskBoard({ onAdd }: { onAdd: () => void }) {
   }
 
   async function handleDelete(id: string) {
+    setDeletePending(true);
     try {
       await mutateJson("/api/tasks", "DELETE", { id });
       await mutate("/api/tasks", (current: Task[] | undefined) => current?.filter((task) => task.id !== id), { revalidate: false });
@@ -140,6 +142,8 @@ export function TaskBoard({ onAdd }: { onAdd: () => void }) {
       setDeletingTask(null);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Unable to delete task.");
+    } finally {
+      setDeletePending(false);
     }
   }
 
@@ -241,9 +245,11 @@ export function TaskBoard({ onAdd }: { onAdd: () => void }) {
               type="button"
               variant="danger"
               className="bg-red-600 text-white hover:bg-red-700"
+              disabled={deletePending}
               onClick={() => (deletingTask?.id ? handleDelete(deletingTask.id) : null)}
             >
-              Delete
+              {deletePending ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+              {deletePending ? "Deleting..." : "Delete"}
             </Button>
           </div>
         </div>

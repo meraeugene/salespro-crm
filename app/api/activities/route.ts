@@ -2,6 +2,9 @@ import { NextResponse } from "next/server";
 import { createClient as createSupabaseAdmin } from "@supabase/supabase-js";
 import { handleError, hasSupabaseEnv, requireRole } from "@/lib/api";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 const activities = [
   { id: "a1", action: "Deal moved to Negotiation", entity_type: "deal", created_at: "2026-05-20" },
   { id: "a2", action: "Lead assigned to Maya Chen", entity_type: "lead", created_at: "2026-05-19" },

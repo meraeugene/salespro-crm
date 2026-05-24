@@ -2,6 +2,9 @@ import { NextResponse } from "next/server";
 import { handleError, hasSupabaseEnv, requireRole } from "@/lib/api";
 import type { DashboardMetrics } from "@/types/crm";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 function joinedProfileName(value: unknown) {
   if (Array.isArray(value)) {
     return typeof value[0]?.full_name === "string" ? value[0].full_name : undefined;

@@ -15,6 +15,7 @@ import { Button } from "@/components/ui/button";
 import { Input, Select, Textarea } from "@/components/ui/input";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { useMe } from "@/hooks/use-crm";
+import { dealStageOptions } from "@/lib/pipeline-status";
 import { mutateJson } from "@/services/fetcher";
 import { companySchema, contactSchema, dealSchema, noteSchema, taskSchema } from "@/validations/crm";
 
@@ -231,7 +232,7 @@ export function TaskForm({ onDone, initialValues, id, mode = "create" }: { onDon
   );
 }
 
-export function DealForm({ onDone, initialValues, id, mode = "create" }: { onDone?: () => void; initialValues?: Partial<z.input<typeof dealSchema>>; id?: string; mode?: FormMode }) {
+export function DealForm({ onDone, initialValues, id, mode = "create" }: { onDone?: (saved?: Record<string, unknown>) => void; initialValues?: Partial<z.input<typeof dealSchema>>; id?: string; mode?: FormMode }) {
   const { mutate } = useSWRConfig();
   const { data: me } = useMe();
   const canAssign = me?.role === "sales_manager";
@@ -252,8 +253,9 @@ export function DealForm({ onDone, initialValues, id, mode = "create" }: { onDon
       if (!canAssign) delete payload.assigned_to;
       const saved = await mutateJson<Record<string, unknown>>("/api/deals", mode === "edit" ? "PATCH" : "POST", mode === "edit" ? { ...payload, id } : payload);
       await mutate("/api/deals", (current: Array<Record<string, unknown>> | undefined) => updateResourceCache(current, saved, mode), { revalidate: true });
+      await Promise.all([mutate("/api/leads"), mutate("/api/metrics")]);
       toast.success(mode === "edit" ? "Deal updated." : "Deal saved.");
-      onDone?.();
+      onDone?.(saved);
     } catch (error) {
       form.setError("root", { message: error instanceof Error ? error.message : "Unable to save deal." });
     }
@@ -290,13 +292,9 @@ export function DealForm({ onDone, initialValues, id, mode = "create" }: { onDon
           <StatusBadge status={watchedStage ?? "Qualified"} />
         </div>
         <Select className={`mt-2 ${errorClass(errors.stage?.message)}`} {...form.register("stage")}>
-          <option>New Lead</option>
-          <option>Contacted</option>
-          <option>Qualified</option>
-          <option>Proposal Sent</option>
-          <option>Negotiation</option>
-          <option>Won</option>
-          <option>Lost</option>
+          {dealStageOptions.map((stage) => (
+            <option key={stage}>{stage}</option>
+          ))}
         </Select>
         <p className="mt-1.5 text-xs font-normal text-muted">Close probability is calculated from this stage.</p>
         <FieldError message={errors.stage?.message} />

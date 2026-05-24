@@ -1,7 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { ArrowDownUp, Filter, MoreHorizontal, Pencil, RotateCcw, Search, Trash2, X } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { ArrowDownUp, BriefcaseBusiness, Filter, MoreHorizontal, Pencil, RotateCcw, Search, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -13,7 +13,7 @@ import { shortDate } from "@/lib/utils";
 import { useUiStore } from "@/store/ui-store";
 import type { Lead } from "@/types/crm";
 
-export function LeadsTable({ leads, isLoading = false, onEdit, onDelete }: { leads?: Lead[]; isLoading?: boolean; onEdit?: (lead: Lead) => void; onDelete?: (lead: Lead) => void }) {
+export function LeadsTable({ leads, isLoading = false, onEdit, onDelete, onConvert }: { leads?: Lead[]; isLoading?: boolean; onEdit?: (lead: Lead) => void; onDelete?: (lead: Lead) => void; onConvert?: (lead: Lead) => void }) {
   const globalSearch = useUiStore((state) => state.search);
   const [query, setQuery] = useState("");
   const [page, setPage] = useState(1);
@@ -27,7 +27,7 @@ export function LeadsTable({ leads, isLoading = false, onEdit, onDelete }: { lea
   const sources = useMemo(() => Array.from(new Set((leads ?? []).map((lead) => lead.lead_source))).sort(), [leads]);
   const activeFilterCount = Number(Boolean(statusFilter)) + Number(Boolean(sourceFilter));
   const hasFilters = activeFilterCount > 0;
-  const showActions = Boolean(onEdit || onDelete);
+  const showActions = Boolean(onEdit || onDelete || onConvert);
 
   const filtered = useMemo(() => {
     const source = leads ?? [];
@@ -135,7 +135,7 @@ export function LeadsTable({ leads, isLoading = false, onEdit, onDelete }: { lea
               </tr>
             </thead>
             <tbody>
-              {rows.map((lead) => (
+              {rows.map((lead, index) => (
                 <tr key={lead.id} className="border-t border-border hover:bg-slate-50/70">
                   <td className="px-5 py-4 font-medium">{lead.full_name}</td>
                   <td className="px-5 py-4 text-muted">{lead.company}</td>
@@ -149,7 +149,7 @@ export function LeadsTable({ leads, isLoading = false, onEdit, onDelete }: { lea
                   <td className="px-5 py-4 text-muted">{lead.assigned_user ?? "Unassigned"}</td>
                   {showActions ? (
                     <td className="px-5 py-4">
-                      <LeadActions lead={lead} onEdit={onEdit} onDelete={onDelete} />
+                      <LeadActions lead={lead} onEdit={onEdit} onDelete={onDelete} onConvert={onConvert} />
                     </td>
                   ) : null}
                 </tr>
@@ -163,13 +163,39 @@ export function LeadsTable({ leads, isLoading = false, onEdit, onDelete }: { lea
   );
 }
 
-function LeadActions({ lead, onEdit, onDelete }: { lead: Lead; onEdit?: (lead: Lead) => void; onDelete?: (lead: Lead) => void }) {
+function LeadActions({ lead, onEdit, onDelete, onConvert }: { lead: Lead; onEdit?: (lead: Lead) => void; onDelete?: (lead: Lead) => void; onConvert?: (lead: Lead) => void }) {
   const [open, setOpen] = useState(false);
-  if (!onEdit && !onDelete) return null;
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const [menuPosition, setMenuPosition] = useState({ left: 0, top: 0 });
+  const canConvert = Boolean(onConvert && lead.status === "Qualified");
+
+  useEffect(() => {
+    if (!open) return;
+    function placeMenu() {
+      const rect = buttonRef.current?.getBoundingClientRect();
+      if (!rect) return;
+      const width = 176;
+      const height = canConvert ? 116 : 80;
+      const left = Math.max(12, Math.min(rect.right - width, window.innerWidth - width - 12));
+      const hasSpaceBelow = rect.bottom + height + 12 < window.innerHeight;
+      const top = hasSpaceBelow ? rect.bottom + 8 : Math.max(12, rect.top - height - 8);
+      setMenuPosition({ left, top });
+    }
+    placeMenu();
+    window.addEventListener("resize", placeMenu);
+    window.addEventListener("scroll", placeMenu, true);
+    return () => {
+      window.removeEventListener("resize", placeMenu);
+      window.removeEventListener("scroll", placeMenu, true);
+    };
+  }, [canConvert, open]);
+
+  if (!onEdit && !onDelete && !canConvert) return null;
 
   return (
     <div className="relative">
       <Button
+        ref={buttonRef}
         type="button"
         variant="secondary"
         size="icon"
@@ -179,7 +205,23 @@ function LeadActions({ lead, onEdit, onDelete }: { lead: Lead; onEdit?: (lead: L
         <MoreHorizontal className="h-4 w-4" />
       </Button>
       {open ? (
-        <div className="absolute right-0 top-11 z-20 w-36 overflow-hidden rounded-lg border border-border bg-white p-1 shadow-[0_16px_35px_rgba(17,24,39,0.14)]">
+        <div
+          className="fixed z-50 w-44 overflow-hidden rounded-lg border border-border bg-white p-1 shadow-[0_16px_35px_rgba(17,24,39,0.14)]"
+          style={{ left: menuPosition.left, top: menuPosition.top }}
+        >
+          {canConvert ? (
+            <button
+              type="button"
+              onClick={() => {
+                setOpen(false);
+                onConvert?.(lead);
+              }}
+              className="flex h-9 w-full items-center gap-2 rounded-md px-3 text-left text-sm hover:bg-blue-50 hover:text-primary"
+            >
+              <BriefcaseBusiness className="h-4 w-4" />
+              Convert to Deal
+            </button>
+          ) : null}
           {onEdit ? (
             <button
               type="button"

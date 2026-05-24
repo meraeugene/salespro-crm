@@ -5,6 +5,9 @@ import { notes } from "@/lib/mock-data";
 import { noteSchema } from "@/validations/crm";
 import { z } from "zod";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 const salesRoles = ["sales_manager", "sales_representative"] as const;
 
 export async function GET() {

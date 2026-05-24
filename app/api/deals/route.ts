@@ -2,8 +2,12 @@ import { NextResponse } from "next/server";
 import { handleError, hasSupabaseEnv, requireRole } from "@/lib/api";
 import { probabilityForStage } from "@/lib/deal-probability";
 import { deals } from "@/lib/mock-data";
+import { leadStatusForDealStage } from "@/lib/pipeline-status";
 import { dealSchema } from "@/validations/crm";
 import { z } from "zod";
+
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
 const salesRoles = ["sales_manager", "sales_representative"] as const;
 
@@ -52,6 +56,20 @@ export async function PATCH(request: Request) {
   if (profile?.role === "sales_representative") query = query.eq("assigned_to", user.id);
   const { data, error: dbError } = await query.select().single();
   if (dbError) return handleError(dbError);
+  if (updates.stage) {
+    const leadStatus = leadStatusForDealStage(updates.stage);
+    if (leadStatus) {
+      let leadQuery = supabase.from("leads").update({ status: leadStatus });
+      if (data.company_id) {
+        leadQuery = leadQuery.eq("company_id", data.company_id);
+      } else {
+        leadQuery = leadQuery.eq("company", data.company);
+      }
+      if (profile?.role === "sales_representative") leadQuery = leadQuery.eq("assigned_to", user.id);
+      const { error: leadError } = await leadQuery;
+      if (leadError) return handleError(leadError);
+    }
+  }
   await supabase.from("activities").insert({
     action: updates.stage ? `Deal moved to ${updates.stage}` : "Deal updated",
     entity_type: "deal",

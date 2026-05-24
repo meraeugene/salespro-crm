@@ -3,6 +3,9 @@ import { roleLabels } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import type { Role } from "@/types/crm";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 export async function GET() {
   const supabase = await createClient();
   const {

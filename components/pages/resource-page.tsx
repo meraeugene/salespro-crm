@@ -9,6 +9,7 @@ import {
   CheckSquare,
   Factory,
   Mail,
+  Loader2,
   MoreHorizontal,
   NotebookText,
   Pencil,
@@ -26,6 +27,7 @@ import { LeadForm } from "@/components/forms/lead-form";
 import {
   CompanyForm,
   ContactForm,
+  DealForm,
   NoteForm,
   TaskForm,
 } from "@/components/forms/resource-forms";
@@ -49,18 +51,21 @@ import {
 import { shortDate, shortDateTime } from "@/lib/utils";
 import { mutateJson } from "@/services/fetcher";
 import { useUiStore } from "@/store/ui-store";
-import type { Lead } from "@/types/crm";
+import type { Deal, Lead } from "@/types/crm";
 
 export function LeadsPageClient() {
   const [open, setOpen] = useState(false);
   const [editingLead, setEditingLead] = useState<Lead | null>(null);
   const [deletingLead, setDeletingLead] = useState<Lead | null>(null);
+  const [convertingLead, setConvertingLead] = useState<Lead | null>(null);
+  const [deletePending, setDeletePending] = useState(false);
   const { data, isLoading } = useLeads();
   const { data: me } = useMe();
   const { mutate } = useSWRConfig();
   const isManager = me?.role === "sales_manager";
 
   async function handleDeleteLead(id: string) {
+    setDeletePending(true);
     try {
       await mutateJson("/api/leads", "DELETE", { id });
       await mutate("/api/leads", (current: Lead[] | undefined) => current?.filter((lead) => lead.id !== id), { revalidate: false });
@@ -69,7 +74,44 @@ export function LeadsPageClient() {
       setDeletingLead(null);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Unable to delete lead.");
+    } finally {
+      setDeletePending(false);
     }
+  }
+
+  async function handleLeadConverted(lead: Lead, savedDeal?: Record<string, unknown>) {
+    setConvertingLead(null);
+    try {
+      const convertedStatus = "Proposal" as const;
+      const updatedLead = await mutateJson<Lead>("/api/leads", "PATCH", { id: lead.id, status: convertedStatus });
+      await mutate(
+        "/api/leads",
+        (current: Lead[] | undefined) =>
+          current?.map((item) => (item.id === lead.id ? { ...item, ...updatedLead, status: convertedStatus } : item)),
+        { revalidate: false },
+      );
+      if (savedDeal?.id) {
+        await mutate(
+          "/api/deals",
+          (current: Deal[] | undefined) => {
+            const alreadyExists = current?.some((deal) => deal.id === savedDeal.id);
+            if (alreadyExists) return current;
+            return [{ ...(savedDeal as Deal) }, ...(current ?? [])];
+          },
+          { revalidate: false },
+        );
+      }
+      await Promise.all([mutate("/api/leads"), mutate("/api/deals"), mutate("/api/metrics")]);
+      toast.success("Lead converted to deal.");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Deal was created, but the lead status was not updated.");
+    }
+  }
+
+  function defaultCloseDate() {
+    const date = new Date();
+    date.setDate(date.getDate() + 30);
+    return date.toISOString().slice(0, 10);
   }
 
   return (
@@ -88,7 +130,7 @@ export function LeadsPageClient() {
           </Button>
         ) : null}
       </div>
-      <LeadsTable leads={data} isLoading={isLoading} onEdit={setEditingLead} onDelete={isManager ? setDeletingLead : undefined} />
+      <LeadsTable leads={data} isLoading={isLoading} onEdit={setEditingLead} onDelete={isManager ? setDeletingLead : undefined} onConvert={isManager ? setConvertingLead : undefined} />
       <Modal open={open} title="Create lead" onClose={() => setOpen(false)}>
         <LeadForm onDone={() => setOpen(false)} />
       </Modal>
@@ -124,12 +166,36 @@ export function LeadsPageClient() {
               type="button"
               variant="danger"
               className="bg-red-600 text-white hover:bg-red-700"
+              disabled={deletePending}
               onClick={() => (deletingLead?.id ? handleDeleteLead(deletingLead.id) : null)}
             >
-              Delete
+              {deletePending ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+              {deletePending ? "Deleting..." : "Delete"}
             </Button>
           </div>
         </div>
+      </Modal>
+      <Modal open={Boolean(convertingLead)} title="Convert lead to deal" onClose={() => setConvertingLead(null)}>
+        {convertingLead ? (
+          <div className="space-y-4">
+            <p className="text-sm text-muted">
+              Create a deal from this qualified lead. The new deal will appear in the pipeline, and the lead will move to Proposal after saving.
+            </p>
+            <DealForm
+              onDone={(savedDeal) => {
+                void handleLeadConverted(convertingLead, savedDeal);
+              }}
+              initialValues={{
+                title: `${convertingLead.company} Opportunity`,
+                company: convertingLead.company,
+                value: 0,
+                stage: "Qualified",
+                assigned_to: convertingLead.assigned_to ?? null,
+                expected_close_date: defaultCloseDate(),
+              }}
+            />
+          </div>
+        ) : null}
       </Modal>
     </div>
   );
@@ -313,6 +379,7 @@ export function SimpleList({
     unknown
   > | null>(null);
   const [confirmingClear, setConfirmingClear] = useState(false);
+  const [deletePending, setDeletePending] = useState(false);
   const visibleData = useMemo(() => {
     const items = data ?? [];
     const terms = globalSearch.toLowerCase().split(/\s+/).filter(Boolean);
@@ -331,6 +398,7 @@ export function SimpleList({
   }, [data, globalSearch]);
 
   async function handleDelete(id: string) {
+    setDeletePending(true);
     try {
       const endpoint =
         resource === "notifications" ? "/api/activities" : `/api/${resource}`;
@@ -346,6 +414,8 @@ export function SimpleList({
       setDeletingItem(null);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Unable to delete.");
+    } finally {
+      setDeletePending(false);
     }
   }
 
@@ -526,11 +596,13 @@ export function SimpleList({
               type="button"
               variant="danger"
               className="bg-red-600 text-white hover:bg-red-700"
+              disabled={deletePending}
               onClick={() =>
                 deletingItem?.id ? handleDelete(String(deletingItem.id)) : null
               }
             >
-              Delete
+              {deletePending ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+              {deletePending ? "Deleting..." : "Delete"}
             </Button>
           </div>
         </div>

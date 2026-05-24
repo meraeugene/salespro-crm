@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Input, Select, Textarea } from "@/components/ui/input";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { useMe } from "@/hooks/use-crm";
+import { leadStatusOptions } from "@/lib/pipeline-status";
 import { mutateJson } from "@/services/fetcher";
 import { leadSchema } from "@/validations/crm";
 
@@ -101,7 +102,7 @@ export function LeadForm({ onDone, initialValues, id, mode = "create" }: { onDon
         </div>
         <Select className={`mt-2 ${errorClass(errors.status?.message) ?? ""}`} {...form.register("status")}>
         <option value="" disabled>Select status</option>
-        {["New", "Contacted", "Qualified", "Proposal", "Won", "Lost"].map((status) => (
+        {leadStatusOptions.map((status) => (
           <option key={status}>{status}</option>
         ))}
       </Select>{fieldError(errors.status?.message)}</label>

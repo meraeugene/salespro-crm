@@ -1,8 +1,13 @@
 import { NextResponse } from "next/server";
 import { handleError, hasSupabaseEnv, requireRole } from "@/lib/api";
+import { probabilityForStage } from "@/lib/deal-probability";
 import { leads } from "@/lib/mock-data";
+import { leadStatusToDealStage } from "@/lib/pipeline-status";
 import { leadSchema } from "@/validations/crm";
 import { z } from "zod";
+
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
 const salesRoles = ["sales_manager", "sales_representative"] as const;
 
@@ -52,6 +57,20 @@ export async function PATCH(request: Request) {
   if (profile?.role === "sales_representative") query = query.eq("assigned_to", user.id);
   const { data, error: dbError } = await query.select().single();
   if (dbError) return handleError(dbError);
+  if (updates.status) {
+    const dealStage = leadStatusToDealStage[updates.status];
+    let dealQuery = supabase
+      .from("deals")
+      .update({ stage: dealStage, probability: probabilityForStage(dealStage) });
+    if (data.company_id) {
+      dealQuery = dealQuery.eq("company_id", data.company_id);
+    } else {
+      dealQuery = dealQuery.eq("company", data.company);
+    }
+    if (profile?.role === "sales_representative") dealQuery = dealQuery.eq("assigned_to", user.id);
+    const { error: dealError } = await dealQuery;
+    if (dealError) return handleError(dealError);
+  }
   return NextResponse.json(data);
 }
 

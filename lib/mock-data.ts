@@ -14,21 +14,21 @@ export const companies: Company[] = [
 ];
 
 export const leads: Lead[] = [
-  { id: "l1", full_name: "David Wong", company: "Stellar Dynamics", email: "david@stellar.example", phone: "(555) 817-6516", status: "Qualified", lead_source: "Webinar", assigned_to: profiles[1].id, assigned_user: "Maya Chen", last_contacted: "2026-05-18", notes: "Interested in enterprise rollout.", created_at: "2026-04-13" },
-  { id: "l2", full_name: "Benjamin Ross", company: "Acme Inc.", email: "ben@acme.example", phone: "(555) 184-6439", status: "Contacted", lead_source: "Referral", assigned_to: profiles[1].id, assigned_user: "Maya Chen", last_contacted: "2026-05-15", notes: "Needs procurement review.", created_at: "2026-04-18" },
-  { id: "l3", full_name: "Grace Anderson", company: "Globax Corporation", email: "grace@globax.example", phone: "(555) 684-4391", status: "Proposal", lead_source: "LinkedIn", assigned_to: profiles[1].id, assigned_user: "Maya Chen", last_contacted: "2026-05-19", notes: "Proposal sent for 120 seats.", created_at: "2026-04-21" },
+  { id: "l1", full_name: "David Wong", company: "Stellar Dynamics", email: "david@stellar.example", phone: "(555) 817-6516", status: "Proposal", lead_source: "Webinar", assigned_to: profiles[1].id, assigned_user: "Maya Chen", last_contacted: "2026-05-18", notes: "Proposal sent for enterprise rollout.", created_at: "2026-04-13" },
+  { id: "l2", full_name: "Benjamin Ross", company: "Acme Inc.", email: "ben@acme.example", phone: "(555) 184-6439", status: "Proposal", lead_source: "Referral", assigned_to: profiles[1].id, assigned_user: "Maya Chen", last_contacted: "2026-05-15", notes: "Proposal with procurement for review.", created_at: "2026-04-18" },
+  { id: "l3", full_name: "Grace Anderson", company: "Globax Corporation", email: "grace@globax.example", phone: "(555) 684-4391", status: "Won", lead_source: "LinkedIn", assigned_to: profiles[1].id, assigned_user: "Maya Chen", last_contacted: "2026-05-19", notes: "Closed global rollout for 120 seats.", created_at: "2026-04-21" },
   { id: "l4", full_name: "Alice Chapman", company: "Northstar Labs", email: "alice@northstar.example", phone: "(555) 787-2280", status: "New", lead_source: "Website", assigned_to: profiles[1].id, assigned_user: "Maya Chen", last_contacted: "2026-05-11", notes: "Requested pricing.", created_at: "2026-05-01" },
   { id: "l5", full_name: "Dominic Richards", company: "Helio Metrics", email: "dominic@helio.example", phone: "(555) 980-1480", status: "Won", lead_source: "Event", assigned_to: profiles[1].id, assigned_user: "Maya Chen", last_contacted: "2026-05-20", notes: "Closed pilot package.", created_at: "2026-05-06" },
   { id: "l6", full_name: "Nadia Patel", company: "Kinetic Works", email: "nadia@kinetic.example", phone: "(555) 421-6670", status: "Qualified", lead_source: "Partner", assigned_to: profiles[1].id, assigned_user: "Maya Chen", last_contacted: "2026-05-17", notes: "Security questionnaire pending.", created_at: "2026-05-08" },
 ];
 
 export const deals: Deal[] = [
-  { id: "d1", title: "Stellar Enterprise CRM", company: "Stellar Dynamics", value: 142000, probability: 80, stage: "Negotiation", assigned_to: profiles[1].id, assigned_user: "Maya Chen", expected_close_date: "2026-06-14", created_at: "2026-04-15" },
+  { id: "d1", title: "Stellar Enterprise CRM", company: "Stellar Dynamics", value: 142000, probability: 60, stage: "Proposal Sent", assigned_to: profiles[1].id, assigned_user: "Maya Chen", expected_close_date: "2026-06-14", created_at: "2026-04-15" },
   { id: "d2", title: "Acme Sales Hub", company: "Acme Inc.", value: 86000, probability: 60, stage: "Proposal Sent", assigned_to: profiles[1].id, assigned_user: "Maya Chen", expected_close_date: "2026-06-28", created_at: "2026-04-23" },
-  { id: "d3", title: "Globax Global Rollout", company: "Globax Corporation", value: 228000, probability: 40, stage: "Qualified", assigned_to: profiles[1].id, assigned_user: "Maya Chen", expected_close_date: "2026-07-03", created_at: "2026-04-29" },
-  { id: "d4", title: "Northstar Pilot", company: "Northstar Labs", value: 32000, probability: 20, stage: "Contacted", assigned_to: profiles[1].id, assigned_user: "Maya Chen", expected_close_date: "2026-06-10", created_at: "2026-05-04" },
-  { id: "d5", title: "Helio Expansion", company: "Helio Metrics", value: 64000, probability: 100, stage: "Won", assigned_to: profiles[1].id, assigned_user: "Maya Chen", expected_close_date: "2026-05-20", created_at: "2026-05-02" },
-  { id: "d6", title: "Kinetic Enablement", company: "Kinetic Works", value: 47500, probability: 10, stage: "New Lead", assigned_to: profiles[1].id, assigned_user: "Maya Chen", expected_close_date: "2026-07-18", created_at: "2026-05-10" },
+  { id: "d3", title: "Globax Global Rollout", company: "Globax Corporation", value: 228000, probability: 100, stage: "Won", assigned_to: profiles[1].id, assigned_user: "Maya Chen", expected_close_date: "2026-07-03", created_at: "2026-04-29" },
+  { id: "d4", title: "Northstar Pilot", company: "Northstar Labs", value: 32000, probability: 10, stage: "New Lead", assigned_to: profiles[1].id, assigned_user: "Maya Chen", expected_close_date: "2026-06-10", created_at: "2026-05-04" },
+  { id: "d5", title: "Helio Metrics Pilot", company: "Helio Metrics", value: 59000, probability: 100, stage: "Won", assigned_to: profiles[1].id, assigned_user: "Maya Chen", expected_close_date: "2026-05-20", created_at: "2026-05-02" },
+  { id: "d6", title: "Kinetic Enablement Rollout", company: "Kinetic Works", value: 41000, probability: 40, stage: "Qualified", assigned_to: profiles[1].id, assigned_user: "Maya Chen", expected_close_date: "2026-06-24", created_at: "2026-05-10" },
 ];
 
 export const contacts: Contact[] = leads.map((lead) => ({

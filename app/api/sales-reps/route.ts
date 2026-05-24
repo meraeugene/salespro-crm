@@ -2,6 +2,9 @@ import { NextResponse } from "next/server";
 import { handleError, hasSupabaseEnv, requireRole } from "@/lib/api";
 import { profiles } from "@/lib/mock-data";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 export async function GET() {
   if (!hasSupabaseEnv()) {
     return NextResponse.json(profiles.filter((profile) => profile.role === "sales_representative"));
