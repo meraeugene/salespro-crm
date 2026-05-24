@@ -37,7 +37,7 @@ export function Navbar() {
 
   return (
     <header className="sticky top-0 z-20 border-b border-border bg-white/95 backdrop-blur">
-      <div className="flex h-20 items-center justify-end gap-3 px-4 sm:px-6 lg:px-9">
+      <div className="flex h-20 items-center justify-start gap-3 px-4 sm:px-6 lg:px-9">
         <div className="relative w-full max-w-md">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
             <Input

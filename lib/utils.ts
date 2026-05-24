@@ -13,6 +13,11 @@ export function currency(value: number) {
   }).format(value);
 }
 
+export function humanize(value?: string | null) {
+  if (!value) return "";
+  return value.replace(/[_-]+/g, " ").replace(/\s+/g, " ").trim();
+}
+
 export function shortDate(value?: string | null) {
   if (!value) return "Not contacted";
   return new Intl.DateTimeFormat("en-US", { month: "short", day: "2-digit", year: "numeric" }).format(

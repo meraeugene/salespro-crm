@@ -82,7 +82,11 @@ export function TaskBoard({ onAdd }: { onAdd: () => void }) {
   const [urgencyFilter, setUrgencyFilter] = useState("");
   const [deletePending, setDeletePending] = useState(false);
   const isManager = me?.role === "sales_manager";
+  const isSalesRep = me?.role === "sales_representative";
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
+  const emptyDescription = isSalesRep
+    ? "No data yet. Please wait for your manager to assign tasks to you."
+    : "Create your first task to start tracking follow-up work.";
 
   const tasks = useMemo(() => {
     const items = optimisticTasks ?? data ?? [];
@@ -280,7 +284,7 @@ export function TaskBoard({ onAdd }: { onAdd: () => void }) {
               </DragOverlay>
             </DndContext>
           ) : (
-            <EmptyState title="No tasks" description="Create your first task to start tracking follow-up work." />
+            <EmptyState title="No tasks" description={emptyDescription} />
           )}
         </CardContent>
       </Card>

@@ -27,6 +27,7 @@ export function LeadsTable({ leads, isLoading = false, onEdit, onDelete, onConve
   const { data: me } = useMe();
   const { data: reps } = useSalesReps();
   const isManager = me?.role === "sales_manager";
+  const isSalesRep = me?.role === "sales_representative";
   const pageSize = 5;
 
   const statuses = useMemo(() => Array.from(new Set((leads ?? []).map((lead) => lead.status))).sort(), [leads]);
@@ -133,7 +134,14 @@ export function LeadsTable({ leads, isLoading = false, onEdit, onDelete, onConve
         </div>
       ) : rows.length === 0 ? (
         <div className="p-4">
-          <EmptyState title="No leads found" description="Create a lead or adjust the current filters to see matching records." />
+          <EmptyState
+            title="No leads found"
+            description={
+              isSalesRep
+                ? "No data yet. Please wait for your manager to assign leads to you."
+                : "Create a lead or adjust the current filters to see matching records."
+            }
+          />
         </div>
       ) : (
         <div className="overflow-x-auto">

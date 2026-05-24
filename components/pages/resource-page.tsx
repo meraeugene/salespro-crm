@@ -1,14 +1,16 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useMemo, useState, type KeyboardEvent } from "react";
 import {
   Bell,
   Building2,
   CalendarDays,
   CheckCircle2,
   CheckSquare,
+  Clock,
   Factory,
+  Globe2,
   Mail,
   Loader2,
   MoreHorizontal,
@@ -51,7 +53,8 @@ import {
   useNotes,
   useSalesReps,
 } from "@/hooks/use-crm";
-import { shortDate, shortDateTime } from "@/lib/utils";
+import { AnalyticsSkeleton } from "@/components/skeletons/analytics-skeleton";
+import { humanize, shortDate, shortDateTime } from "@/lib/utils";
 import { mutateJson } from "@/services/fetcher";
 import { useUiStore } from "@/store/ui-store";
 import type { Deal, Lead } from "@/types/crm";
@@ -240,7 +243,19 @@ export function DealsPageClient() {
 
 export function AnalyticsPageClient() {
   const { data, isLoading } = useMetrics();
-  if (isLoading || !data) return <Skeleton className="h-[680px] rounded-xl" />;
+  const { data: me, isLoading: meLoading } = useMe();
+  if (isLoading || meLoading || !data) return <AnalyticsSkeleton />;
+  if (me?.role !== "sales_manager") {
+    return (
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-3xl font-semibold">Analytics</h1>
+          <p className="mt-1 text-muted">Manager analytics are available to sales managers.</p>
+        </div>
+        <EmptyState title="Manager analytics only" description="Ask your manager for team performance, forecast, and quota reporting." />
+      </div>
+    );
+  }
   return (
     <div className="space-y-6">
       <div>
@@ -391,6 +406,7 @@ export function SimpleList({
   const [repFilter, setRepFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const isManager = me?.role === "sales_manager";
+  const isSalesRep = me?.role === "sales_representative";
   const statuses = useMemo(() => {
     if (resource !== "tasks") return [];
     return Array.from(new Set((data ?? []).map((item) => String(item.status ?? "")).filter(Boolean))).sort();
@@ -415,21 +431,25 @@ export function SimpleList({
   const visibleData = useMemo(() => {
     const items = data ?? [];
     const terms = globalSearch.toLowerCase().split(/\s+/).filter(Boolean);
-    if (!terms.length) return items;
-    return items.filter((item) => {
-      const haystack = Object.values(item)
-        .map((value) => {
-          if (value === null || value === undefined) return "";
-          if (typeof value === "object") return JSON.stringify(value);
-          return String(value);
-        })
-        .join(" ")
-        .toLowerCase();
-      return terms.every((term) => haystack.includes(term));
-    })
-    .filter((item) => (repFilter ? item.assigned_to === repFilter : true))
-    .filter((item) => (statusFilter ? item.status === statusFilter : true));
+    return items
+      .filter((item) => {
+        if (!terms.length) return true;
+        const haystack = Object.values(item)
+          .map((value) => {
+            if (value === null || value === undefined) return "";
+            if (typeof value === "object") return JSON.stringify(value);
+            return String(value);
+          })
+          .join(" ")
+          .toLowerCase();
+        return terms.every((term) => haystack.includes(term));
+      })
+      .filter((item) => (repFilter ? item.assigned_to === repFilter : true))
+      .filter((item) => (statusFilter ? item.status === statusFilter : true));
   }, [data, globalSearch, repFilter, statusFilter]);
+  const emptyDescription = isSalesRep
+    ? "No data yet. Please wait for your manager to assign records to you."
+    : "Create your first record to start building a complete CRM history.";
 
   async function handleDelete(id: string) {
     setDeletePending(true);
@@ -615,7 +635,7 @@ export function SimpleList({
           ) : (
             <EmptyState
               title={`No ${title.toLowerCase()}`}
-              description="Create your first record to start building a complete CRM history."
+              description={emptyDescription}
             />
           )}
         </CardContent>
@@ -905,6 +925,10 @@ function ResourceItem({
   const id = String(item.id ?? "");
   const readActivityIds = useUiStore((state) => state.readActivityIds);
   const markActivityRead = useUiStore((state) => state.markActivityRead);
+  const labelize = (value: string) => {
+    const text = humanize(value);
+    return text ? text.charAt(0).toUpperCase() + text.slice(1) : "";
+  };
 
   if (resource === "companies") {
     return (
@@ -989,26 +1013,38 @@ function ResourceItem({
           </div>
           <ResourceCardActions id={id} label="Contact" item={item} canDelete={canDelete} onEdit={onEdit} onDelete={onDelete} />
         </div>
-        <div className="mt-5 space-y-2 border-t border-border pt-4 text-sm text-muted">
-          <div className="flex items-center gap-2">
-            <Mail className="h-4 w-4" />
-            {String(item.email ?? "No email")}
+        <div className="mt-5 grid gap-2 border-t border-border pt-4 text-sm text-muted">
+          <div className="flex min-w-0 items-center gap-2 rounded-lg bg-blue-50/60 p-2.5">
+            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white text-primary shadow-sm">
+              <Mail className="h-4 w-4" />
+            </span>
+            <span className="truncate">{String(item.email ?? "No email")}</span>
           </div>
-          <div className="flex items-center gap-2">
-            <Phone className="h-4 w-4" />
-            {String(item.phone ?? "No phone")}
+          <div className="flex min-w-0 items-center gap-2 rounded-lg bg-sky-50/70 p-2.5">
+            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white text-primary shadow-sm">
+              <Phone className="h-4 w-4" />
+            </span>
+            <span className="truncate">{String(item.phone ?? "No phone")}</span>
           </div>
-          <div className="flex items-center gap-2">
-            <UsersRound className="h-4 w-4" />
-            Assigned sales rep: {String(item.assigned_user ?? "Unassigned")}
+          <div className="flex min-w-0 items-center gap-2 rounded-lg bg-indigo-50/60 p-2.5">
+            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white text-primary shadow-sm">
+              <UsersRound className="h-4 w-4" />
+            </span>
+            <span className="truncate">Rep: {String(item.assigned_user ?? "Unassigned")}</span>
           </div>
-          <div className="flex items-center gap-2">
-            <Phone className="h-4 w-4" />
-            Prefers {String(item.preferred_contact_method ?? "Email")} - {String(item.best_time_to_contact ?? "9:00 AM - 5:00 PM")}
+          <div className="flex min-w-0 items-center gap-2 rounded-lg bg-blue-50/60 p-2.5">
+            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white text-primary shadow-sm">
+              <Clock className="h-4 w-4" />
+            </span>
+            <span className="truncate">
+              Prefers {String(item.preferred_contact_method ?? "Email")} - {String(item.best_time_to_contact ?? "9:00 AM - 5:00 PM")}
+            </span>
           </div>
-          <div className="flex items-center gap-2">
-            <CalendarDays className="h-4 w-4" />
-            Timezone: {String(item.timezone ?? "Asia/Manila")}
+          <div className="flex min-w-0 items-center gap-2 rounded-lg bg-slate-50 p-2.5">
+            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white text-primary shadow-sm">
+              <Globe2 className="h-4 w-4" />
+            </span>
+            <span className="truncate">Timezone: {humanize(String(item.timezone ?? "Asia/Manila"))}</span>
           </div>
         </div>
       </div>
@@ -1064,10 +1100,7 @@ function ResourceItem({
   }
 
   if (resource === "notes") {
-    const noteType =
-      String(item.related_type ?? "general")
-        .charAt(0)
-        .toUpperCase() + String(item.related_type ?? "general").slice(1);
+    const noteType = labelize(String(item.related_type ?? "general"));
     return (
       <div className="min-h-[158px] rounded-xl border border-border bg-white p-4 shadow-[0_8px_22px_rgba(17,24,39,0.04)]">
         <div className="flex items-start justify-between gap-3">
@@ -1084,6 +1117,10 @@ function ResourceItem({
           </div>
           <ResourceCardActions id={id} label="Note" item={item} canDelete={canDelete} onEdit={onEdit} onDelete={onDelete} />
         </div>
+        <div className="mt-5 flex items-center gap-2 border-t border-border pt-4 text-sm text-muted">
+          <CalendarDays className="h-4 w-4" />
+          Added {shortDate(String(item.created_at ?? ""))}
+        </div>
       </div>
     );
   }
@@ -1093,32 +1130,37 @@ function ResourceItem({
     const metadata = (
       item.metadata && typeof item.metadata === "object" ? item.metadata : {}
     ) as Record<string, unknown>;
-    const title = String(item.action ?? "Notification").replace(/_/g, " ");
-    const activityType = String(metadata.activity_type ?? "");
-    const subject = String(metadata.subject ?? "");
-    const body = String(metadata.body ?? "");
-    const outcome = String(metadata.outcome ?? "");
+    const title = humanize(String(item.action ?? "Notification"));
+    const activityType = humanize(String(metadata.activity_type ?? ""));
+    const subject = humanize(String(metadata.subject ?? ""));
+    const body = humanize(String(metadata.body ?? ""));
+    const outcome = humanize(String(metadata.outcome ?? ""));
     const scheduledAt = String(metadata.scheduled_at ?? "");
     const detail = subject
       ? `${subject}${scheduledAt ? ` scheduled for ${shortDateTime(scheduledAt)}` : ""}${outcome ? ` - ${outcome}` : ""}${body ? `: ${body}` : ""}`
       : metadata.title
-        ? `${String(metadata.title)} for ${String(metadata.company ?? "unknown company")}${metadata.stage ? ` is now in ${String(metadata.stage)}` : ""}.`
-        : `${String(item.entity_type ?? "Activity")} update recorded in the CRM.`;
+        ? `${humanize(String(metadata.title))} for ${humanize(String(metadata.company ?? "unknown company"))}${metadata.stage ? ` is now in ${humanize(String(metadata.stage))}` : ""}.`
+        : `${labelize(String(item.entity_type ?? "Activity"))} update recorded in the CRM.`;
     const ActivityIcon = activityType === "Email" ? Mail : activityType === "Call" ? Phone : activityType === "Meeting" || activityType === "Demo" ? CalendarDays : Bell;
+    const notificationProps = !isRead && id
+      ? {
+          role: "button" as const,
+          tabIndex: 0,
+          onClick: () => markActivityRead(id),
+          onKeyDown: (event: KeyboardEvent<HTMLDivElement>) => {
+            if (event.key === "Enter" || event.key === " ") {
+              event.preventDefault();
+              markActivityRead(id);
+            }
+          },
+        }
+      : {};
     return (
       <div
-        role="button"
-        tabIndex={0}
-        onClick={() => id ? markActivityRead(id) : null}
-        onKeyDown={(event) => {
-          if ((event.key === "Enter" || event.key === " ") && id) {
-            event.preventDefault();
-            markActivityRead(id);
-          }
-        }}
-        className={`flex w-full cursor-pointer flex-col gap-4 text-left transition md:flex-row md:items-center md:justify-between ${
-          isRead ? "rounded-xl border border-transparent px-5 py-5 opacity-75 hover:bg-slate-50" : "rounded-xl border border-blue-100 bg-blue-50/80 px-5 py-5 shadow-[0_10px_26px_rgba(37,99,235,0.08)] hover:bg-blue-50"
-        }`}
+        {...notificationProps}
+        className={`flex w-full flex-col gap-4 text-left transition md:flex-row md:items-center md:justify-between ${
+          isRead ? "rounded-xl border border-transparent px-5 py-5 opacity-75" : "rounded-xl border border-blue-100 bg-blue-50/80 px-5 py-5 shadow-[0_10px_26px_rgba(37,99,235,0.08)] hover:bg-blue-50"
+        } ${isRead ? "cursor-default" : "cursor-pointer"}`}
       >
         <div className="flex min-w-0 items-start gap-4">
           <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg ${
@@ -1133,12 +1175,7 @@ function ResourceItem({
             </div>
             <div className="flex flex-wrap gap-2 text-xs text-muted">
               <StatusBadge
-                status={
-                  String(item.entity_type ?? "system")
-                    .charAt(0)
-                    .toUpperCase() +
-                  String(item.entity_type ?? "system").slice(1)
-                }
+                status={labelize(String(item.entity_type ?? "system"))}
               />
               <span className="inline-flex items-center gap-1 rounded-full bg-slate-50 px-2.5 py-1">
                 <CalendarDays className="h-3.5 w-3.5" />

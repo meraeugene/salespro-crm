@@ -21,7 +21,9 @@ export async function AppShell({ children }: { children: ReactNode }) {
   let fullName = "Sales User";
   let role: Role = "sales_manager";
   let avatarUrl: string | null = null;
+  let userId = "guest";
   if (user) {
+    userId = user.id;
     const { data: profile } = await supabase
       .from("profiles")
       .select("full_name, role, avatar_url")
@@ -38,7 +40,7 @@ export async function AppShell({ children }: { children: ReactNode }) {
   }
 
   return (
-    <ShellChrome fullName={fullName} initials={getInitials(fullName) || "SU"} role={role} avatarUrl={avatarUrl}>
+    <ShellChrome userId={userId} fullName={fullName} initials={getInitials(fullName) || "SU"} role={role} avatarUrl={avatarUrl}>
       {children}
     </ShellChrome>
   );

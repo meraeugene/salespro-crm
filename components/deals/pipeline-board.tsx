@@ -21,11 +21,12 @@ import {
 import { arrayMove, SortableContext, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { useSWRConfig } from "swr";
-import { BriefcaseBusiness, CalendarDays, Eye, Filter, Loader2, MoreHorizontal, Pencil, Plus, RotateCcw, Trash2, UsersRound } from "lucide-react";
+import { BadgePercent, BriefcaseBusiness, CalendarDays, Clock3, DollarSign, Eye, Filter, Loader2, MoreHorizontal, Pencil, Plus, RotateCcw, Route, Trash2, UsersRound } from "lucide-react";
 import { toast } from "sonner";
 import { DealForm } from "@/components/forms/resource-forms";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { EmptyState } from "@/components/ui/empty-state";
 import { Select, Textarea } from "@/components/ui/input";
 import { Modal } from "@/components/ui/modal";
 import { PipelineSkeleton } from "@/components/skeletons/pipeline-skeleton";
@@ -125,6 +126,9 @@ export function PipelineBoard() {
   }, [localDeals]);
 
   const activeDeal = useMemo(() => localDeals.find((deal) => deal.id === activeId) ?? null, [activeId, localDeals]);
+  const emptyDescription = isManager
+    ? "Create a deal or adjust the current filters to see matching records."
+    : "No data yet. Please wait for your manager to assign deals to you.";
 
   function handleDragStart(event: DragStartEvent) {
     setActiveId(String(event.active.id));
@@ -232,16 +236,20 @@ export function PipelineBoard() {
           </Button>
         ) : null}
       </div>
-      <DndContext sensors={sensors} collisionDetection={pipelineCollisionDetection} onDragStart={handleDragStart} onDragOver={handleDragOver} onDragEnd={handleDragEnd} onDragCancel={() => { setActiveId(null); setOverId(null); }}>
-        <div className="grid min-h-[500px] grid-cols-1 gap-3 overflow-x-auto pb-2 md:grid-cols-2 xl:grid-cols-5">
-          {grouped.map((column) => (
-            <PipelineColumn key={column.id} id={column.id} label={column.label} deals={column.deals} updating={updating} activeId={activeId} overId={overId} onEdit={setEditingDeal} onDelete={isManager ? setDeletingDeal : undefined} />
-          ))}
-        </div>
-        <DragOverlay dropAnimation={{ duration: 220, easing: "cubic-bezier(0.2, 0, 0, 1)" }}>
-          {activeDeal ? <DealCardContent deal={activeDeal} updating={false} dragOverlay /> : null}
-        </DragOverlay>
-      </DndContext>
+      {localDeals.length ? (
+        <DndContext sensors={sensors} collisionDetection={pipelineCollisionDetection} onDragStart={handleDragStart} onDragOver={handleDragOver} onDragEnd={handleDragEnd} onDragCancel={() => { setActiveId(null); setOverId(null); }}>
+          <div className="grid min-h-[500px] grid-cols-1 gap-3 overflow-x-auto pb-2 md:grid-cols-2 xl:grid-cols-5">
+            {grouped.map((column) => (
+              <PipelineColumn key={column.id} id={column.id} label={column.label} deals={column.deals} updating={updating} activeId={activeId} overId={overId} onEdit={setEditingDeal} onDelete={isManager ? setDeletingDeal : undefined} />
+            ))}
+          </div>
+          <DragOverlay dropAnimation={{ duration: 220, easing: "cubic-bezier(0.2, 0, 0, 1)" }}>
+            {activeDeal ? <DealCardContent deal={activeDeal} updating={false} dragOverlay /> : null}
+          </DragOverlay>
+        </DndContext>
+      ) : (
+        <EmptyState title="No deals found" description={emptyDescription} />
+      )}
       <Modal open={createOpen} title="Create deal" onClose={() => setCreateOpen(false)}>
         <DealForm onDone={() => setCreateOpen(false)} />
       </Modal>
@@ -458,9 +466,9 @@ function DealCardContent({ deal, updating, dragOverlay = false, actions }: { dea
   }
 
   return (
-    <div>
+    <div className="space-y-3">
       <div className="flex items-start gap-3">
-        <span className="rounded-lg bg-primary/20 p-2 text-primary-dark">
+        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/20 text-primary-dark">
           <BriefcaseBusiness className="h-4 w-4" />
         </span>
         <div className="min-w-0 flex-1">
@@ -469,36 +477,59 @@ function DealCardContent({ deal, updating, dragOverlay = false, actions }: { dea
         </div>
         {actions}
       </div>
-      <div className="mt-3 flex w-full items-center justify-between gap-3 text-xs">
-        <span className="font-semibold">{currency(deal.value)}</span>
-        <span className="text-muted">{deal.probability}% close</span>
+      <div className="grid grid-cols-2 gap-2 text-xs">
+        <div className="rounded-lg border border-white/80 bg-white/75 p-2.5">
+          <div className="flex items-center gap-1.5 text-[10px] font-medium uppercase text-muted">
+            <DollarSign className="h-3.5 w-3.5 text-primary" />
+            Value
+          </div>
+          <p className="mt-1.5 font-semibold text-foreground">{currency(deal.value)}</p>
+        </div>
+        <div className="rounded-lg border border-white/80 bg-white/75 p-2.5">
+          <div className="flex items-center gap-1.5 text-[10px] font-medium uppercase text-muted">
+            <BadgePercent className="h-3.5 w-3.5 text-primary" />
+            Close
+          </div>
+          <p className="mt-1.5 font-semibold text-foreground">{deal.probability}%</p>
+        </div>
       </div>
-      <div className="mt-3 flex flex-wrap gap-1.5 text-[11px]">
-        <span className="rounded-full bg-white/75 px-2 py-0.5 text-primary">{deal.forecast_category ?? "Pipeline"}</span>
+      <div className="flex flex-wrap gap-1.5 text-[11px]">
+        <span className="inline-flex items-center gap-1 rounded-full bg-white/75 px-2 py-0.5 text-primary">
+          <Route className="h-3 w-3" />
+          {deal.forecast_category ?? "Pipeline"}
+        </span>
         {deal.review_status && deal.review_status !== "Not Required" ? (
           <span className="rounded-full bg-white/75 px-2 py-0.5 text-muted">{deal.review_status}</span>
         ) : null}
       </div>
-      <div className="mt-3 space-y-1.5 border-t border-border pt-3 text-xs text-muted">
-        <div className="flex items-center gap-1.5">
-          <CalendarDays className="h-3.5 w-3.5" />
-          Expected {shortDate(deal.expected_close_date)}
+      <div className="space-y-2 rounded-lg border border-white/80 bg-white/60 p-2.5 text-xs leading-5 text-muted">
+        <div className="flex items-start gap-2">
+          <CalendarDays className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
+          <span><span className="font-medium text-foreground">Expected</span> {shortDate(deal.expected_close_date)}</span>
         </div>
-        <div className="flex items-center gap-1.5">
-          <CalendarDays className="h-3.5 w-3.5" />
-          In stage {daysInStage(deal)}d
+        <div className="flex items-start gap-2">
+          <Clock3 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
+          <span><span className="font-medium text-foreground">In stage</span> {daysInStage(deal)}d</span>
         </div>
-        <div className="line-clamp-2">
-          Next: {deal.next_step ?? "No next step"}{deal.next_step_date ? ` (${shortDate(deal.next_step_date)})` : ""}
+      </div>
+      <div className="rounded-lg border border-blue-100 bg-white/60 p-2.5 text-xs leading-5 text-muted">
+        <div className="flex items-start gap-2">
+          <Route className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
+          <span className="line-clamp-2">
+            <span className="font-medium text-foreground">Next:</span> {deal.next_step ?? "No next step"}{deal.next_step_date ? ` (${shortDate(deal.next_step_date)})` : ""}
+          </span>
         </div>
+      </div>
+      <div className="space-y-2 text-xs leading-5 text-muted">
         {deal.stage === "Lost" ? (
-          <div className="line-clamp-2 text-red-700">
-            Loss: {deal.loss_reason ?? "No loss reason"}
+          <div className="flex items-start gap-2 text-red-700">
+            <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-red-500" />
+            <span className="line-clamp-2">Loss: {deal.loss_reason ?? "No loss reason"}</span>
           </div>
         ) : null}
-        <div className="flex items-center gap-1.5">
-          <UsersRound className="h-3.5 w-3.5" />
-          {deal.assigned_user ?? "Unassigned"}
+        <div className="flex items-start gap-2">
+          <UsersRound className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
+          <span className="line-clamp-1">{deal.assigned_user ?? "Unassigned"}</span>
         </div>
       </div>
       {updating ? (

@@ -44,8 +44,7 @@ textarea {
 button,
 a,
 select,
-summary,
-[role="button"] {
+summary {
   cursor: pointer;
 }
 
