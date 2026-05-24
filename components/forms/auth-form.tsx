@@ -172,7 +172,7 @@ export function AuthForm({ mode }: { mode: "login" | "forgot" }) {
                 {isSubmitting ? (
                   <>
                     <Loader2 className="h-4 w-4 animate-spin" />
-                    Please wait
+                    {mode === "login" ? "Signing in" : "Sending reset link"}
                   </>
                 ) : mode === "login" ? (
                   "Sign in"
