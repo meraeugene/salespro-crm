@@ -1,5 +1,7 @@
 "use client";
 
+import Link from "next/link";
+import type { ReactNode } from "react";
 import { useMemo, useState } from "react";
 import {
   closestCorners,
@@ -15,16 +17,17 @@ import {
 } from "@dnd-kit/core";
 import { arrayMove, SortableContext, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { CalendarDays, CheckCircle2, CheckSquare, Loader2, MoreHorizontal, Pencil, Plus, Trash2, UsersRound } from "lucide-react";
+import { AlertTriangle, CalendarDays, CheckCircle2, CheckSquare, Clock, Eye, Filter, Loader2, MoreHorizontal, Pencil, Plus, RotateCcw, Trash2, UsersRound } from "lucide-react";
 import { useSWRConfig } from "swr";
 import { toast } from "sonner";
 import { TaskForm } from "@/components/forms/resource-forms";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
+import { Select } from "@/components/ui/input";
 import { Modal } from "@/components/ui/modal";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useTasks } from "@/hooks/use-crm";
+import { useMe, useSalesReps, useTasks } from "@/hooks/use-crm";
 import { shortDate } from "@/lib/utils";
 import { mutateJson } from "@/services/fetcher";
 import { useUiStore } from "@/store/ui-store";
@@ -48,8 +51,24 @@ function columnTone(status: TaskStatus) {
   return "border-orange-100";
 }
 
+function dayKey(value: Date) {
+  return new Date(value.getFullYear(), value.getMonth(), value.getDate()).getTime();
+}
+
+function urgencyForTask(task: Task) {
+  if (task.status === "Done") return "done";
+  const due = task.due_date ? dayKey(new Date(task.due_date)) : null;
+  if (!due) return "upcoming";
+  const today = dayKey(new Date());
+  if (due < today) return "overdue";
+  if (due === today) return "today";
+  return "upcoming";
+}
+
 export function TaskBoard({ onAdd }: { onAdd: () => void }) {
   const { data, isLoading } = useTasks();
+  const { data: me } = useMe();
+  const { data: reps } = useSalesReps();
   const { mutate } = useSWRConfig();
   const globalSearch = useUiStore((state) => state.search);
   const [optimisticTasks, setOptimisticTasks] = useState<Task[] | null>(null);
@@ -59,18 +78,32 @@ export function TaskBoard({ onAdd }: { onAdd: () => void }) {
   const [updating, setUpdating] = useState<string | null>(null);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [deletingTask, setDeletingTask] = useState<Task | null>(null);
+  const [repFilter, setRepFilter] = useState("");
+  const [urgencyFilter, setUrgencyFilter] = useState("");
   const [deletePending, setDeletePending] = useState(false);
+  const isManager = me?.role === "sales_manager";
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
 
   const tasks = useMemo(() => {
     const items = optimisticTasks ?? data ?? [];
     const terms = globalSearch.toLowerCase().split(/\s+/).filter(Boolean);
-    if (!terms.length) return items;
     return items.filter((task) => {
       const haystack = `${task.title} ${task.description ?? ""} ${task.status} ${task.assigned_user ?? ""}`.toLowerCase();
-      return terms.every((term) => haystack.includes(term));
+      const matchesSearch = terms.every((term) => haystack.includes(term));
+      const matchesRep = repFilter ? task.assigned_to === repFilter : true;
+      const matchesUrgency = urgencyFilter ? urgencyForTask(task) === urgencyFilter : true;
+      return matchesSearch && matchesRep && matchesUrgency;
     });
-  }, [data, globalSearch, optimisticTasks]);
+  }, [data, globalSearch, optimisticTasks, repFilter, urgencyFilter]);
+
+  const reminders = useMemo(() => {
+    const source = data ?? [];
+    return {
+      overdue: source.filter((task) => urgencyForTask(task) === "overdue").length,
+      today: source.filter((task) => urgencyForTask(task) === "today").length,
+      upcoming: source.filter((task) => urgencyForTask(task) === "upcoming").length,
+    };
+  }, [data]);
 
   const grouped = useMemo(
     () =>
@@ -173,11 +206,45 @@ export function TaskBoard({ onAdd }: { onAdd: () => void }) {
     <>
       <Card>
         <CardHeader>
-          <CardTitle>Tasks</CardTitle>
-          <Button size="sm" onClick={onAdd}>
-            <Plus className="h-4 w-4" />
-            Add
-          </Button>
+          <div>
+            <CardTitle>Tasks</CardTitle>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <ReminderPill tone="red" icon={<AlertTriangle className="h-3.5 w-3.5" />} label="Overdue" value={reminders.overdue} />
+              <ReminderPill tone="blue" icon={<Clock className="h-3.5 w-3.5" />} label="Today" value={reminders.today} />
+              <ReminderPill tone="indigo" icon={<CalendarDays className="h-3.5 w-3.5" />} label="Upcoming" value={reminders.upcoming} />
+            </div>
+          </div>
+          <div className="flex flex-wrap justify-end gap-2">
+            {isManager ? (
+              <Select value={repFilter} onChange={(event) => setRepFilter(event.target.value)} className="w-44">
+                <option value="">Any rep</option>
+                {(reps ?? []).map((rep) => (
+                  <option key={rep.id} value={rep.id}>{rep.full_name}</option>
+                ))}
+              </Select>
+            ) : null}
+            <Select value={urgencyFilter} onChange={(event) => setUrgencyFilter(event.target.value)} className="w-40">
+              <option value="">Any due date</option>
+              <option value="overdue">Overdue</option>
+              <option value="today">Today</option>
+              <option value="upcoming">Upcoming</option>
+              <option value="done">Done</option>
+            </Select>
+            {repFilter || urgencyFilter ? (
+              <Button type="button" variant="secondary" size="icon" onClick={() => { setRepFilter(""); setUrgencyFilter(""); }} aria-label="Reset task filters">
+                <RotateCcw className="h-4 w-4" />
+              </Button>
+            ) : (
+              <span className="inline-flex h-10 items-center gap-2 rounded-lg border border-border bg-white px-3 text-sm text-muted">
+                <Filter className="h-4 w-4" />
+                Filters
+              </span>
+            )}
+            <Button size="sm" onClick={onAdd}>
+              <Plus className="h-4 w-4" />
+              Add
+            </Button>
+          </div>
         </CardHeader>
         <CardContent>
           {tasks.length ? (
@@ -336,7 +403,7 @@ function TaskCard({
     <Card
       ref={setNodeRef}
       style={style}
-      className={`w-full cursor-grab p-4 active:cursor-grabbing ${isDragging ? "opacity-30" : "shadow-[0_8px_22px_rgba(17,24,39,0.04)]"}`}
+      className={`w-full cursor-grab p-4 transition duration-150 hover:-translate-y-0.5 hover:border-primary hover:shadow-[0_14px_30px_rgba(37,99,235,0.14)] active:cursor-grabbing ${isDragging ? "opacity-30" : "shadow-[0_8px_22px_rgba(17,24,39,0.04)]"}`}
       {...listeners}
       {...attributes}
     >
@@ -371,6 +438,14 @@ function TaskCard({
                 <Pencil className="h-4 w-4" />
                 Edit
               </button>
+              <Link
+                href={`/tasks/${task.id}`}
+                onPointerDown={(event) => event.stopPropagation()}
+                className="flex h-9 w-full items-center gap-2 rounded-md px-3 text-left text-sm text-primary underline decoration-primary/30 underline-offset-4 hover:bg-blue-50 hover:decoration-primary"
+              >
+                <Eye className="h-4 w-4" />
+                View details
+              </Link>
               <button
                 type="button"
                 onPointerDown={(event) => event.stopPropagation()}
@@ -393,6 +468,14 @@ function TaskCard({
 }
 
 function TaskCardContent({ task, updating }: { task: Task; updating: boolean }) {
+  const urgency = urgencyForTask(task);
+  const dueClass =
+    task.status === "Done"
+      ? "text-emerald-700"
+      : task.status === "Todo"
+        ? "text-orange-700"
+        : "text-primary";
+  const dueLabel = urgency === "overdue" ? `Late - due ${shortDate(task.due_date ?? task.created_at)}` : `Due ${shortDate(task.due_date ?? task.created_at)}`;
   return (
     <div className="min-w-0 flex-1">
       <div className="flex items-start gap-3">
@@ -405,9 +488,9 @@ function TaskCardContent({ task, updating }: { task: Task; updating: boolean }) 
           <p className="mt-2 line-clamp-2 text-sm text-muted">{task.description ?? "No description"}</p>
         </div>
       </div>
-      <div className="mt-4 flex items-center gap-2 border-t border-border pt-3 text-sm text-muted">
+      <div className={`mt-4 flex items-center gap-2 border-t border-border pt-3 text-sm ${dueClass}`}>
         <CalendarDays className="h-4 w-4" />
-        Due {shortDate(task.due_date ?? task.created_at)}
+        {dueLabel}
       </div>
       <div className="mt-2 flex items-center gap-2 text-sm text-muted">
         <UsersRound className="h-4 w-4" />
@@ -420,5 +503,20 @@ function TaskCardContent({ task, updating }: { task: Task; updating: boolean }) 
         </p>
       ) : null}
     </div>
+  );
+}
+
+function ReminderPill({ tone, icon, label, value }: { tone: "red" | "blue" | "indigo"; icon: ReactNode; label: string; value: number }) {
+  const className =
+    tone === "red"
+      ? "bg-red-50 text-red-700"
+      : tone === "blue"
+        ? "bg-blue-50 text-primary"
+        : "bg-indigo-50 text-indigo-700";
+  return (
+    <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium ${className}`}>
+      {icon}
+      {label}: {value}
+    </span>
   );
 }

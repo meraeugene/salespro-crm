@@ -1,6 +1,6 @@
 "use client";
 
-import { Area, Bar, BarChart, CartesianGrid, ComposedChart, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import type { DashboardMetrics } from "@/types/crm";
@@ -31,29 +31,65 @@ function ChartEmpty() {
 export function AnalyticsCharts({ metrics }: { metrics: DashboardMetrics }) {
   return (
     <div className="grid gap-5 xl:grid-cols-2">
+      <Card className="overflow-hidden xl:col-span-2">
+        <CardHeader className="items-start">
+          <div>
+            <CardTitle>Team Performance By Rep</CardTitle>
+            <p className="mt-1 text-sm text-muted">Assigned leads, active deals, win rate, overdue tasks, and booked revenue.</p>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {metrics.teamPerformance.length ? (
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[760px] text-left text-sm">
+                <thead className="text-muted">
+                  <tr className="border-b border-border">
+                    <th className="py-3 font-medium">Rep</th>
+                    <th className="py-3 font-medium">Assigned leads</th>
+                    <th className="py-3 font-medium">Active deals</th>
+                    <th className="py-3 font-medium">Win rate</th>
+                    <th className="py-3 font-medium">Overdue tasks</th>
+                    <th className="py-3 font-medium">Revenue</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {metrics.teamPerformance.map((rep) => (
+                    <tr key={rep.name} className="border-b border-border last:border-0">
+                      <td className="py-3 font-semibold">{rep.name}</td>
+                      <td className="py-3 text-muted">{rep.assignedLeads}</td>
+                      <td className="py-3 text-muted">{rep.activeDeals}</td>
+                      <td className="py-3 text-muted">{rep.winRate}%</td>
+                      <td className="py-3 text-muted">{rep.overdueTasks}</td>
+                      <td className="py-3 font-semibold">{formatCurrencyTooltip(rep.revenue)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <EmptyState title="No team data yet" description="Assign leads, deals, and tasks to reps to populate this table." />
+          )}
+        </CardContent>
+      </Card>
+
       <Card className="overflow-hidden">
         <CardHeader className="items-start">
           <div>
-            <CardTitle>Revenue Forecast</CardTitle>
-            <p className="mt-1 text-sm text-muted">Committed revenue versus forecasted pipeline by month.</p>
+            <CardTitle>Forecast Categories</CardTitle>
+            <p className="mt-1 text-sm text-muted">Commit, best case, and pipeline value by expected close month.</p>
           </div>
         </CardHeader>
         <CardContent className="h-80">
           {metrics.forecastSeries.length ? <ResponsiveContainer>
-            <ComposedChart data={metrics.forecastSeries}>
-              <defs>
-                <linearGradient id="forecastArea" x1="0" x2="0" y1="0" y2="1">
-                  <stop offset="5%" stopColor="#93c5fd" stopOpacity={0.5} />
-                  <stop offset="95%" stopColor="#93c5fd" stopOpacity={0.04} />
-                </linearGradient>
-              </defs>
+            <BarChart data={metrics.forecastSeries}>
               <CartesianGrid stroke="#e8eef7" vertical={false} strokeDasharray="4 4" />
               <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fill: "#6b7280", fontSize: 12 }} />
               <YAxis axisLine={false} tickLine={false} tick={{ fill: "#6b7280", fontSize: 12 }} tickFormatter={(value) => `$${Math.round(value / 1000)}k`} />
               <Tooltip contentStyle={tooltipStyle} formatter={formatCurrencyTooltip} />
-              <Area type="monotone" dataKey="forecast" stroke="#93c5fd" fill="url(#forecastArea)" strokeWidth={2} />
-              <Line type="monotone" dataKey="committed" stroke="#2563eb" strokeWidth={3} dot={{ r: 4, fill: "#2563eb" }} />
-            </ComposedChart>
+              <Bar dataKey="commit" stackId="forecast" fill="#1d4ed8" radius={[8, 8, 0, 0]} />
+              <Bar dataKey="bestCase" stackId="forecast" fill="#60a5fa" />
+              <Bar dataKey="pipeline" stackId="forecast" fill="#bfdbfe" />
+            </BarChart>
           </ResponsiveContainer> : <ChartEmpty />}
         </CardContent>
       </Card>
@@ -113,7 +149,7 @@ export function AnalyticsCharts({ metrics }: { metrics: DashboardMetrics }) {
               <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: "#6b7280", fontSize: 12 }} />
               <YAxis axisLine={false} tickLine={false} tick={{ fill: "#6b7280", fontSize: 12 }} tickFormatter={(value) => `$${Math.round(value / 1000)}k`} />
               <Tooltip contentStyle={tooltipStyle} formatter={formatCurrencyTooltip} />
-              <Bar dataKey="quota" fill="#e5eefb" radius={[10, 10, 0, 0]} />
+              <Bar dataKey="monthlyQuota" fill="#e5eefb" radius={[10, 10, 0, 0]} />
               <Bar dataKey="revenue" fill="#1d4ed8" radius={[10, 10, 0, 0]} />
             </BarChart>
           </ResponsiveContainer> : <ChartEmpty />}

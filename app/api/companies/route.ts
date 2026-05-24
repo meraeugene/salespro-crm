@@ -24,6 +24,13 @@ export async function POST(request: Request) {
   if (!hasSupabaseEnv()) return NextResponse.json({ ...parsed.data, id: crypto.randomUUID(), created_at: new Date().toISOString() });
   const { supabase, user, error } = await requireRole(["sales_manager"]);
   if (error) return error;
+  const { data: duplicate, error: duplicateError } = await supabase
+    .from("companies")
+    .select("id")
+    .or(`name.ilike.${parsed.data.name},domain.ilike.${parsed.data.domain}`)
+    .maybeSingle();
+  if (duplicateError) return handleError(duplicateError);
+  if (duplicate?.id) return NextResponse.json({ error: "A company with this name or domain already exists." }, { status: 409 });
   const { data, error: dbError } = await supabase.from("companies").insert({ ...parsed.data, created_by: user.id }).select().single();
   if (dbError) return handleError(dbError);
   return NextResponse.json(data);
@@ -48,6 +55,21 @@ export async function PATCH(request: Request) {
   const { supabase, error } = await requireRole(["sales_manager"]);
   if (error) return error;
   const { id, ...updates } = parsed.data;
+  if (updates.name || updates.domain) {
+    const checks = [
+      updates.name ? `name.ilike.${updates.name}` : "",
+      updates.domain ? `domain.ilike.${updates.domain}` : "",
+    ].filter(Boolean).join(",");
+    const { data: duplicate, error: duplicateError } = await supabase
+      .from("companies")
+      .select("id")
+      .or(checks)
+      .neq("id", id)
+      .limit(1)
+      .maybeSingle();
+    if (duplicateError) return handleError(duplicateError);
+    if (duplicate?.id) return NextResponse.json({ error: "A company with this name or domain already exists." }, { status: 409 });
+  }
   const { data, error: dbError } = await supabase.from("companies").update(updates).eq("id", id).select().single();
   if (dbError) return handleError(dbError);
   return NextResponse.json(data);

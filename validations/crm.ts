@@ -30,9 +30,15 @@ export const leadSchema = z.object({
 export const dealSchema = z.object({
   title: z.string().trim().min(2, "Enter a deal name."),
   company: z.string().trim().min(2, "Select a company."),
+  products_services: z.string().trim().min(2, "Describe what is being sold."),
   value: z.coerce.number({ error: "Enter a deal value." }).nonnegative("Deal value cannot be negative."),
   probability: z.coerce.number().min(0, "Probability cannot be below 0%.").max(100, "Probability cannot be above 100%.").optional(),
   stage: z.enum(["New Lead", "Contacted", "Qualified", "Proposal Sent", "Negotiation", "Won", "Lost"], { error: "Choose a deal stage." }),
+  loss_reason: z.string().trim().optional().nullable(),
+  next_step: z.string().trim().min(2, "Enter the next step."),
+  next_step_date: z.string().min(1, "Choose a next step date."),
+  forecast_category: z.enum(["Commit", "Best Case", "Pipeline"]).default("Pipeline"),
+  review_status: z.enum(["Not Required", "Pending Review", "Approved", "Changes Requested"]).default("Not Required"),
   assigned_to: z.string().uuid().optional().nullable(),
   expected_close_date: z.string().min(1, "Choose an expected close date."),
 });
@@ -60,6 +66,9 @@ export const contactSchema = z.object({
   email: z.string().email("Enter a valid email address."),
   phone: phoneSchema,
   title: z.string().min(2, "Enter a title."),
+  preferred_contact_method: z.enum(["Email", "Phone", "No preference"]).default("Email"),
+  timezone: z.string().trim().min(2, "Enter a timezone."),
+  best_time_to_contact: z.string().trim().min(2, "Enter the best time to contact."),
   avatar_url: z
     .union([
       z.string().url("Enter a valid URL."),
@@ -68,6 +77,16 @@ export const contactSchema = z.object({
     ])
     .optional(),
   assigned_to: z.string().uuid().optional().nullable(),
+});
+
+export const activityLogSchema = z.object({
+  activity_type: z.enum(["Call", "Email", "Meeting", "Demo"], { error: "Choose an activity type." }),
+  entity_type: z.enum(["lead", "deal", "contact", "company"], { error: "Choose what this activity relates to." }),
+  entity_id: z.string().uuid().optional().nullable(),
+  subject: z.string().trim().min(2, "Enter a subject."),
+  body: z.string().trim().min(2, "Enter the activity details."),
+  outcome: z.string().trim().optional().nullable(),
+  scheduled_at: z.string().optional().nullable(),
 });
 
 export const noteSchema = z.object({

@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import {
@@ -20,15 +21,16 @@ import {
 import { arrayMove, SortableContext, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { useSWRConfig } from "swr";
-import { BriefcaseBusiness, CalendarDays, Loader2, MoreHorizontal, Pencil, Plus, Trash2, UsersRound } from "lucide-react";
+import { BriefcaseBusiness, CalendarDays, Eye, Filter, Loader2, MoreHorizontal, Pencil, Plus, RotateCcw, Trash2, UsersRound } from "lucide-react";
 import { toast } from "sonner";
 import { DealForm } from "@/components/forms/resource-forms";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { Select, Textarea } from "@/components/ui/input";
 import { Modal } from "@/components/ui/modal";
 import { PipelineSkeleton } from "@/components/skeletons/pipeline-skeleton";
 import { mutateJson } from "@/services/fetcher";
-import { useDeals, useMe } from "@/hooks/use-crm";
+import { useDeals, useMe, useSalesReps } from "@/hooks/use-crm";
 import { currency, shortDate } from "@/lib/utils";
 import { useUiStore } from "@/store/ui-store";
 import type { Deal, DealStage } from "@/types/crm";
@@ -76,9 +78,17 @@ function cardTone(id: string) {
   return "bg-slate-50 border-slate-200";
 }
 
+function daysInStage(deal: Deal) {
+  const value = deal.stage_changed_at ?? deal.created_at;
+  const changedAt = new Date(value).getTime();
+  if (Number.isNaN(changedAt)) return 0;
+  return Math.max(0, Math.floor((Date.now() - changedAt) / 86_400_000));
+}
+
 export function PipelineBoard() {
   const { data, isLoading } = useDeals();
   const { data: me } = useMe();
+  const { data: reps } = useSalesReps();
   const { mutate } = useSWRConfig();
   const globalSearch = useUiStore((state) => state.search);
   const [updating, setUpdating] = useState<string | null>(null);
@@ -88,18 +98,24 @@ export function PipelineBoard() {
   const [createOpen, setCreateOpen] = useState(false);
   const [editingDeal, setEditingDeal] = useState<Deal | null>(null);
   const [deletingDeal, setDeletingDeal] = useState<Deal | null>(null);
+  const [lostDeal, setLostDeal] = useState<Deal | null>(null);
+  const [lossReason, setLossReason] = useState("");
+  const [repFilter, setRepFilter] = useState("");
+  const [stageFilter, setStageFilter] = useState("");
   const [deletePending, setDeletePending] = useState(false);
   const isManager = me?.role === "sales_manager";
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
   const localDeals = useMemo(() => {
     const deals = optimisticDeals ?? data ?? [];
     const terms = globalSearch.toLowerCase().split(/\s+/).filter(Boolean);
-    if (!terms.length) return deals;
     return deals.filter((deal) => {
       const haystack = `${deal.title} ${deal.company} ${deal.stage} ${deal.assigned_user ?? ""} ${deal.value}`.toLowerCase();
-      return terms.every((term) => haystack.includes(term));
+      const matchesSearch = terms.every((term) => haystack.includes(term));
+      const matchesRep = repFilter ? deal.assigned_to === repFilter : true;
+      const matchesStage = stageFilter ? deal.stage === stageFilter : true;
+      return matchesSearch && matchesRep && matchesStage;
     });
-  }, [data, globalSearch, optimisticDeals]);
+  }, [data, globalSearch, optimisticDeals, repFilter, stageFilter]);
 
   const grouped = useMemo(() => {
     return columns.map((column) => ({
@@ -118,6 +134,23 @@ export function PipelineBoard() {
     setOverId(event.over?.id ? String(event.over.id) : null);
   }
 
+  async function updateDealStage(dealId: string, newStage: DealStage, extra?: Partial<Deal>) {
+    setUpdating(dealId);
+    try {
+      await mutate("/api/deals", mutateJson<Deal>("/api/deals", "PATCH", { id: dealId, stage: newStage, ...extra }), {
+        populateCache: false,
+        revalidate: true,
+        rollbackOnError: true,
+      });
+      await Promise.all([mutate("/api/leads"), mutate("/api/metrics")]);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Unable to update deal.");
+    } finally {
+      setOptimisticDeals(null);
+      setUpdating(null);
+    }
+  }
+
   async function handleDragEnd(event: DragEndEvent) {
     const dealId = String(event.active.id);
     const overId = event.over?.id ? String(event.over.id) : "";
@@ -129,6 +162,11 @@ export function PipelineBoard() {
     if (!newStage || !localDeals.length) return;
     const current = localDeals.find((deal) => deal.id === dealId);
     if (!current) return;
+    if (newStage === "Lost" && current.stage !== "Lost") {
+      setLostDeal(current);
+      setLossReason(current.loss_reason ?? "");
+      return;
+    }
 
     const activeIndex = localDeals.findIndex((deal) => deal.id === dealId);
     const overIndex = overDeal ? localDeals.findIndex((deal) => deal.id === overDeal.id) : -1;
@@ -138,19 +176,7 @@ export function PipelineBoard() {
 
     if (current.stage === newStage && overIndex >= 0) return;
 
-    setUpdating(dealId);
-    try {
-      await mutate("/api/deals", mutateJson<Deal>("/api/deals", "PATCH", { id: dealId, stage: newStage }), {
-      optimisticData: reordered,
-      populateCache: false,
-      revalidate: true,
-      rollbackOnError: true,
-    });
-      await Promise.all([mutate("/api/leads"), mutate("/api/metrics")]);
-    } finally {
-    setOptimisticDeals(null);
-    setUpdating(null);
-    }
+    await updateDealStage(dealId, newStage);
   }
 
   async function handleDeleteDeal(id: string) {
@@ -172,14 +198,40 @@ export function PipelineBoard() {
 
   return (
     <div className="space-y-4">
-      {isManager ? (
-        <div className="flex justify-end">
+      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="inline-flex items-center gap-2 text-sm font-medium text-muted">
+            <Filter className="h-4 w-4" />
+            Filters
+          </span>
+          {isManager ? (
+            <Select value={repFilter} onChange={(event) => setRepFilter(event.target.value)} className="w-44">
+              <option value="">Any rep</option>
+              {(reps ?? []).map((rep) => (
+                <option key={rep.id} value={rep.id}>{rep.full_name}</option>
+              ))}
+            </Select>
+          ) : null}
+          <Select value={stageFilter} onChange={(event) => setStageFilter(event.target.value)} className="w-44">
+            <option value="">Any stage</option>
+            {columns.flatMap((column) => column.stages).map((stage) => (
+              <option key={stage}>{stage}</option>
+            ))}
+          </Select>
+          {repFilter || stageFilter ? (
+            <Button type="button" variant="secondary" size="sm" onClick={() => { setRepFilter(""); setStageFilter(""); }}>
+              <RotateCcw className="h-4 w-4" />
+              Reset
+            </Button>
+          ) : null}
+        </div>
+        {isManager ? (
           <Button onClick={() => setCreateOpen(true)}>
             <Plus className="h-4 w-4" />
             Add Deal
           </Button>
-        </div>
-      ) : null}
+        ) : null}
+      </div>
       <DndContext sensors={sensors} collisionDetection={pipelineCollisionDetection} onDragStart={handleDragStart} onDragOver={handleDragOver} onDragEnd={handleDragEnd} onDragCancel={() => { setActiveId(null); setOverId(null); }}>
         <div className="grid min-h-[500px] grid-cols-1 gap-3 overflow-x-auto pb-2 md:grid-cols-2 xl:grid-cols-5">
           {grouped.map((column) => (
@@ -202,8 +254,14 @@ export function PipelineBoard() {
             initialValues={{
               title: editingDeal.title,
               company: editingDeal.company,
+              products_services: editingDeal.products_services ?? "",
               value: editingDeal.value,
               stage: editingDeal.stage,
+              loss_reason: editingDeal.loss_reason ?? "",
+              next_step: editingDeal.next_step ?? "",
+              next_step_date: editingDeal.next_step_date ?? "",
+              forecast_category: editingDeal.forecast_category ?? "Pipeline",
+              review_status: editingDeal.review_status ?? "Not Required",
               assigned_to: editingDeal.assigned_to ?? null,
               expected_close_date: editingDeal.expected_close_date,
             }}
@@ -231,6 +289,36 @@ export function PipelineBoard() {
             </Button>
           </div>
         </div>
+      </Modal>
+      <Modal open={Boolean(lostDeal)} title="Mark deal as lost" onClose={() => setLostDeal(null)}>
+        <form
+          className="space-y-4"
+          onSubmit={(event) => {
+            event.preventDefault();
+            if (!lostDeal) return;
+            if (!lossReason.trim()) {
+              toast.error("Add a loss reason before moving the deal to Lost.");
+              return;
+            }
+            void updateDealStage(lostDeal.id, "Lost", { loss_reason: lossReason.trim() }).then(() => {
+              setLostDeal(null);
+              setLossReason("");
+            });
+          }}
+        >
+          <p className="text-sm text-muted">A loss reason is required so reporting can explain why revenue left the pipeline.</p>
+          <label className="block text-sm font-medium">
+            Loss reason
+            <Textarea className="mt-2" value={lossReason} onChange={(event) => setLossReason(event.target.value)} placeholder="Chose competitor, budget frozen, timing changed..." />
+          </label>
+          <div className="flex justify-end gap-2">
+            <Button type="button" variant="secondary" onClick={() => setLostDeal(null)}>Cancel</Button>
+            <Button type="submit" disabled={updating === lostDeal?.id}>
+              {updating === lostDeal?.id ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+              Save loss reason
+            </Button>
+          </div>
+        </form>
       </Modal>
     </div>
   );
@@ -307,6 +395,7 @@ function DealCard({ deal, updating, tone, onEdit, onDelete }: { deal: Deal; upda
               <div className="absolute right-0 top-10 z-20 w-36 overflow-hidden rounded-lg border border-border bg-white p-1 shadow-[0_16px_35px_rgba(17,24,39,0.14)]">
                 <button
                   type="button"
+                  onPointerDown={(event) => event.stopPropagation()}
                   onClick={() => {
                     setActionsOpen(false);
                     onEdit(deal);
@@ -316,9 +405,18 @@ function DealCard({ deal, updating, tone, onEdit, onDelete }: { deal: Deal; upda
                   <Pencil className="h-4 w-4" />
                   Edit
                 </button>
+                <Link
+                  href={`/deals/${deal.id}`}
+                  onPointerDown={(event) => event.stopPropagation()}
+                  className="flex h-9 w-full items-center gap-2 rounded-md px-3 text-left text-sm text-primary underline decoration-primary/30 underline-offset-4 hover:bg-blue-50 hover:decoration-primary"
+                >
+                  <Eye className="h-4 w-4" />
+                  View details
+                </Link>
                 {onDelete ? (
                   <button
                     type="button"
+                    onPointerDown={(event) => event.stopPropagation()}
                     onClick={() => {
                       setActionsOpen(false);
                       onDelete(deal);
@@ -375,15 +473,29 @@ function DealCardContent({ deal, updating, dragOverlay = false, actions }: { dea
         <span className="font-semibold">{currency(deal.value)}</span>
         <span className="text-muted">{deal.probability}% close</span>
       </div>
+      <div className="mt-3 flex flex-wrap gap-1.5 text-[11px]">
+        <span className="rounded-full bg-white/75 px-2 py-0.5 text-primary">{deal.forecast_category ?? "Pipeline"}</span>
+        {deal.review_status && deal.review_status !== "Not Required" ? (
+          <span className="rounded-full bg-white/75 px-2 py-0.5 text-muted">{deal.review_status}</span>
+        ) : null}
+      </div>
       <div className="mt-3 space-y-1.5 border-t border-border pt-3 text-xs text-muted">
-        <div className="flex items-center justify-between gap-2">
-          <span>Stage</span>
-          <span className="font-medium text-foreground">{deal.stage}</span>
-        </div>
         <div className="flex items-center gap-1.5">
           <CalendarDays className="h-3.5 w-3.5" />
           Expected {shortDate(deal.expected_close_date)}
         </div>
+        <div className="flex items-center gap-1.5">
+          <CalendarDays className="h-3.5 w-3.5" />
+          In stage {daysInStage(deal)}d
+        </div>
+        <div className="line-clamp-2">
+          Next: {deal.next_step ?? "No next step"}{deal.next_step_date ? ` (${shortDate(deal.next_step_date)})` : ""}
+        </div>
+        {deal.stage === "Lost" ? (
+          <div className="line-clamp-2 text-red-700">
+            Loss: {deal.loss_reason ?? "No loss reason"}
+          </div>
+        ) : null}
         <div className="flex items-center gap-1.5">
           <UsersRound className="h-3.5 w-3.5" />
           {deal.assigned_user ?? "Unassigned"}

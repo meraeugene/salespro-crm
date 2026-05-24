@@ -2,7 +2,7 @@
 
 import { Controller, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import type { ChangeEvent } from "react";
 import type { z } from "zod";
 import { useSWRConfig } from "swr";
@@ -14,12 +14,25 @@ import { PhoneField } from "@/components/forms/phone-field";
 import { Button } from "@/components/ui/button";
 import { Input, Select, Textarea } from "@/components/ui/input";
 import { StatusBadge } from "@/components/ui/status-badge";
-import { useMe } from "@/hooks/use-crm";
+import { useCompanies, useContacts, useDeals, useLeads, useMe } from "@/hooks/use-crm";
 import { dealStageOptions } from "@/lib/pipeline-status";
 import { mutateJson } from "@/services/fetcher";
-import { companySchema, contactSchema, dealSchema, noteSchema, taskSchema } from "@/validations/crm";
+import { activityLogSchema, companySchema, contactSchema, dealSchema, noteSchema, taskSchema } from "@/validations/crm";
 
 type FormMode = "create" | "edit";
+
+const timezoneOptions = [
+  "Asia/Manila",
+  "Asia/Singapore",
+  "Asia/Tokyo",
+  "Australia/Sydney",
+  "Europe/London",
+  "Europe/Paris",
+  "America/New_York",
+  "America/Chicago",
+  "America/Denver",
+  "America/Los_Angeles",
+];
 
 function updateResourceCache<T extends Record<string, unknown>>(current: T[] | undefined, saved: T, mode: FormMode) {
   if (!current) return saved ? [saved] : current;
@@ -95,7 +108,7 @@ export function ContactForm({ onDone, initialValues, id, mode = "create" }: { on
   const canAssign = me?.role === "sales_manager";
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [avatarUrl, setAvatarUrl] = useState(initialValues?.avatar_url ?? "");
-  const form = useForm<z.input<typeof contactSchema>>({ resolver: zodResolver(contactSchema), defaultValues: { full_name: initialValues?.full_name ?? "", company: initialValues?.company ?? "", email: initialValues?.email ?? "", phone: initialValues?.phone ?? "", title: initialValues?.title ?? "", avatar_url: initialValues?.avatar_url ?? "", assigned_to: initialValues?.assigned_to ?? null } });
+  const form = useForm<z.input<typeof contactSchema>>({ resolver: zodResolver(contactSchema), defaultValues: { full_name: initialValues?.full_name ?? "", company: initialValues?.company ?? "", email: initialValues?.email ?? "", phone: initialValues?.phone ?? "", title: initialValues?.title ?? "", preferred_contact_method: initialValues?.preferred_contact_method ?? "Email", timezone: initialValues?.timezone ?? "Asia/Manila", best_time_to_contact: initialValues?.best_time_to_contact ?? "9:00 AM - 5:00 PM", avatar_url: initialValues?.avatar_url ?? "", assigned_to: initialValues?.assigned_to ?? null } });
   function handleAvatarChange(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
     if (!file) return;
@@ -173,6 +186,25 @@ export function ContactForm({ onDone, initialValues, id, mode = "create" }: { on
         />
       </label>
       <label className="text-sm font-medium md:col-span-2"><Required>Title</Required><Input className={`mt-2 ${errorClass(errors.title?.message)}`} placeholder="VP Sales" {...form.register("title")} /><FieldError message={errors.title?.message} /></label>
+      <label className="text-sm font-medium">
+        <Required>Preferred contact</Required>
+        <Select className={`mt-2 ${errorClass(errors.preferred_contact_method?.message)}`} {...form.register("preferred_contact_method")}>
+          <option>Email</option>
+          <option>Phone</option>
+          <option>No preference</option>
+        </Select>
+        <FieldError message={errors.preferred_contact_method?.message} />
+      </label>
+      <label className="text-sm font-medium">
+        <Required>Timezone</Required>
+        <Select className={`mt-2 ${errorClass(errors.timezone?.message)}`} {...form.register("timezone")}>
+          {timezoneOptions.map((timezone) => (
+            <option key={timezone}>{timezone}</option>
+          ))}
+        </Select>
+        <FieldError message={errors.timezone?.message} />
+      </label>
+      <label className="text-sm font-medium md:col-span-2"><Required>Best time to contact</Required><Input className={`mt-2 ${errorClass(errors.best_time_to_contact?.message)}`} placeholder="9:00 AM - 11:00 AM" {...form.register("best_time_to_contact")} /><FieldError message={errors.best_time_to_contact?.message} /></label>
       <FormError message={errors.root?.message} />
       <Button className="md:col-span-2" disabled={form.formState.isSubmitting}><SaveLabel saving={form.formState.isSubmitting} label={mode === "edit" ? "Update Contact" : "Save Contact"} /></Button>
     </form>
@@ -241,14 +273,28 @@ export function DealForm({ onDone, initialValues, id, mode = "create" }: { onDon
     defaultValues: {
       title: initialValues?.title ?? "",
       company: initialValues?.company ?? "",
+      products_services: initialValues?.products_services ?? "",
       value: initialValues?.value ?? 0,
       stage: initialValues?.stage ?? "Qualified",
+      loss_reason: initialValues?.loss_reason ?? "",
+      next_step: initialValues?.next_step ?? "",
+      next_step_date: initialValues?.next_step_date ?? "",
+      forecast_category: initialValues?.forecast_category ?? "Pipeline",
+      review_status: initialValues?.review_status ?? "Not Required",
       assigned_to: initialValues?.assigned_to ?? null,
       expected_close_date: initialValues?.expected_close_date ?? "",
     },
   });
   async function onSubmit(values: z.input<typeof dealSchema>) {
     try {
+      if (values.stage === "Lost" && !values.loss_reason?.trim()) {
+        form.setError("loss_reason", { message: "Enter a loss reason." });
+        return;
+      }
+      if (values.stage === "Won" && values.review_status === "Pending Review") {
+        form.setError("review_status", { message: "Approve this deal before marking it Won." });
+        return;
+      }
       const payload = { ...values };
       if (!canAssign) delete payload.assigned_to;
       const saved = await mutateJson<Record<string, unknown>>("/api/deals", mode === "edit" ? "PATCH" : "POST", mode === "edit" ? { ...payload, id } : payload);
@@ -262,6 +308,7 @@ export function DealForm({ onDone, initialValues, id, mode = "create" }: { onDon
   }
   const errors = form.formState.errors;
   const watchedStage = form.watch("stage");
+  const requiresLossReason = watchedStage === "Lost";
   return (
     <form className="grid gap-4 md:grid-cols-2" noValidate onSubmit={form.handleSubmit(onSubmit)}>
       {canAssign ? (
@@ -276,6 +323,7 @@ export function DealForm({ onDone, initialValues, id, mode = "create" }: { onDon
         </label>
       ) : null}
       <label className="text-sm font-medium md:col-span-2"><Required>Deal name</Required><Input className={`mt-2 ${errorClass(errors.title?.message)}`} placeholder="Acme Sales Hub" {...form.register("title")} /><FieldError message={errors.title?.message} /></label>
+      <label className="text-sm font-medium md:col-span-2"><Required>Products or services</Required><Textarea className={`mt-2 ${errorClass(errors.products_services?.message)}`} placeholder="SalesPro CRM seats, onboarding, reporting, or services included in this deal" {...form.register("products_services")} /><FieldError message={errors.products_services?.message} /></label>
       <label className="text-sm font-medium">
         <Required>Company</Required>
         <Controller
@@ -300,6 +348,30 @@ export function DealForm({ onDone, initialValues, id, mode = "create" }: { onDon
         <FieldError message={errors.stage?.message} />
       </label>
       <label className="text-sm font-medium"><Required>Expected close date</Required><Input className={`mt-2 ${errorClass(errors.expected_close_date?.message)}`} type="date" {...form.register("expected_close_date")} /><FieldError message={errors.expected_close_date?.message} /></label>
+      <label className="text-sm font-medium"><Required>Next step</Required><Input className={`mt-2 ${errorClass(errors.next_step?.message)}`} placeholder="Send security docs" {...form.register("next_step")} /><FieldError message={errors.next_step?.message} /></label>
+      <label className="text-sm font-medium"><Required>Next step date</Required><Input className={`mt-2 ${errorClass(errors.next_step_date?.message)}`} type="date" {...form.register("next_step_date")} /><FieldError message={errors.next_step_date?.message} /></label>
+      <label className="text-sm font-medium">
+        <Required>Forecast category</Required>
+        <Select className={`mt-2 ${errorClass(errors.forecast_category?.message)}`} {...form.register("forecast_category")}>
+          <option>Pipeline</option>
+          <option>Best Case</option>
+          <option>Commit</option>
+        </Select>
+        <FieldError message={errors.forecast_category?.message} />
+      </label>
+      <label className="text-sm font-medium">
+        <Required>Manager review</Required>
+        <Select className={`mt-2 ${errorClass(errors.review_status?.message)}`} {...form.register("review_status")}>
+          <option>Not Required</option>
+          <option>Pending Review</option>
+          <option>Approved</option>
+          <option>Changes Requested</option>
+        </Select>
+        <FieldError message={errors.review_status?.message} />
+      </label>
+      {requiresLossReason ? (
+        <label className="text-sm font-medium md:col-span-2"><Required>Loss reason</Required><Textarea className={`mt-2 ${errorClass(errors.loss_reason?.message)}`} placeholder="Budget frozen, chose competitor, timing changed..." {...form.register("loss_reason")} /><FieldError message={errors.loss_reason?.message} /></label>
+      ) : null}
       <FormError message={errors.root?.message} />
       <Button className="md:col-span-2" disabled={form.formState.isSubmitting}><SaveLabel saving={form.formState.isSubmitting} label={mode === "edit" ? "Update Deal" : "Save Deal"} /></Button>
     </form>
@@ -339,6 +411,99 @@ export function NoteForm({ onDone, initialValues, id, mode = "create" }: { onDon
       <label className="text-sm font-medium"><Required>Note</Required><Textarea className={`mt-2 ${errorClass(errors.body?.message)}`} placeholder="Add a useful sales note" {...form.register("body")} /><FieldError message={errors.body?.message} /></label>
       <FormError message={errors.root?.message} />
       <Button disabled={form.formState.isSubmitting}><SaveLabel saving={form.formState.isSubmitting} label={mode === "edit" ? "Update Note" : "Save Note"} /></Button>
+    </form>
+  );
+}
+
+export function ActivityLogForm({ onDone, initialValues }: { onDone?: () => void; initialValues?: Partial<z.input<typeof activityLogSchema>> }) {
+  const { mutate } = useSWRConfig();
+  const { data: leads } = useLeads();
+  const { data: deals } = useDeals();
+  const { data: contacts } = useContacts();
+  const { data: companies } = useCompanies();
+  const relatedOptions = useMemo(
+    () => [
+      ...(leads ?? []).map((item) => ({ value: `lead:${item.id}`, label: `Lead - ${item.full_name}` })),
+      ...(deals ?? []).map((item) => ({ value: `deal:${item.id}`, label: `Deal - ${item.title}` })),
+      ...(contacts ?? []).map((item) => ({ value: `contact:${item.id}`, label: `Contact - ${item.full_name}` })),
+      ...(companies ?? []).map((item) => ({ value: `company:${item.id}`, label: `Company - ${item.name}` })),
+    ],
+    [companies, contacts, deals, leads],
+  );
+  const initialRelated = initialValues?.entity_type && initialValues?.entity_id ? `${initialValues.entity_type}:${initialValues.entity_id}` : "";
+  const [relatedValue, setRelatedValue] = useState(initialRelated);
+  const form = useForm<z.input<typeof activityLogSchema>>({
+    resolver: zodResolver(activityLogSchema),
+    defaultValues: {
+      activity_type: initialValues?.activity_type ?? "Call",
+      entity_type: initialValues?.entity_type ?? "lead",
+      entity_id: initialValues?.entity_id ?? null,
+      subject: initialValues?.subject ?? "",
+      body: initialValues?.body ?? "",
+      outcome: initialValues?.outcome ?? "",
+      scheduled_at: initialValues?.scheduled_at ?? "",
+    },
+  });
+
+  async function onSubmit(values: z.input<typeof activityLogSchema>) {
+    try {
+      const saved = await mutateJson<Record<string, unknown>>("/api/activities", "POST", {
+        ...values,
+        entity_id: values.entity_id || null,
+        outcome: values.outcome || null,
+        scheduled_at: values.scheduled_at || null,
+      });
+      await mutate("/api/activities", (current: Array<Record<string, unknown>> | undefined) => [saved, ...(current ?? [])], { revalidate: true });
+      toast.success(values.scheduled_at ? "Activity scheduled." : "Activity logged.");
+      onDone?.();
+    } catch (error) {
+      form.setError("root", { message: error instanceof Error ? error.message : "Unable to save activity." });
+    }
+  }
+
+  const errors = form.formState.errors;
+  const watchedType = form.watch("activity_type");
+  return (
+    <form className="grid gap-4 md:grid-cols-2" noValidate onSubmit={form.handleSubmit(onSubmit)}>
+      <label className="text-sm font-medium">
+        <div className="flex items-center justify-between gap-3">
+          <Required>Activity type</Required>
+          <StatusBadge status={watchedType ?? "Call"} />
+        </div>
+        <Select className={`mt-2 ${errorClass(errors.activity_type?.message)}`} {...form.register("activity_type")}>
+          <option>Call</option>
+          <option>Email</option>
+          <option>Meeting</option>
+          <option>Demo</option>
+        </Select>
+        <FieldError message={errors.activity_type?.message} />
+      </label>
+      <label className="text-sm font-medium">
+        Related record
+        <Select
+          className="mt-2"
+          value={relatedValue}
+          onChange={(event) => {
+            const value = event.target.value;
+            setRelatedValue(value);
+            const [type, recordId] = value.split(":");
+            form.setValue("entity_type", (type || "lead") as z.input<typeof activityLogSchema>["entity_type"], { shouldValidate: true });
+            form.setValue("entity_id", recordId || null, { shouldValidate: true });
+          }}
+        >
+          <option value="">No specific record</option>
+          {relatedOptions.map((option) => (
+            <option key={option.value} value={option.value}>{option.label}</option>
+          ))}
+        </Select>
+        <FieldError message={errors.entity_type?.message ?? errors.entity_id?.message} />
+      </label>
+      <label className="text-sm font-medium md:col-span-2"><Required>Subject</Required><Input className={`mt-2 ${errorClass(errors.subject?.message)}`} placeholder="Call recap, outreach email, scheduled demo..." {...form.register("subject")} /><FieldError message={errors.subject?.message} /></label>
+      <label className="text-sm font-medium md:col-span-2"><Required>Details</Required><Textarea className={`mt-2 ${errorClass(errors.body?.message)}`} placeholder="What happened, what was sent, or what is planned?" {...form.register("body")} /><FieldError message={errors.body?.message} /></label>
+      <label className="text-sm font-medium"><span>Outcome</span><Input className={`mt-2 ${errorClass(errors.outcome?.message)}`} placeholder="Connected, left voicemail, accepted meeting..." {...form.register("outcome")} /><FieldError message={errors.outcome?.message} /></label>
+      <label className="text-sm font-medium"><span>Scheduled time</span><Input className={`mt-2 ${errorClass(errors.scheduled_at?.message)}`} type="datetime-local" {...form.register("scheduled_at")} /><FieldError message={errors.scheduled_at?.message} /></label>
+      <FormError message={errors.root?.message} />
+      <Button className="md:col-span-2" disabled={form.formState.isSubmitting}><SaveLabel saving={form.formState.isSubmitting} label="Save Activity" /></Button>
     </form>
   );
 }

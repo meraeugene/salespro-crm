@@ -43,23 +43,30 @@ export async function GET() {
   try {
     let dealsQuery = supabase
       .from("deals")
-      .select("id, value, stage, assigned_to, expected_close_date, created_at, profiles:assigned_to(full_name)")
+      .select("id, value, stage, assigned_to, expected_close_date, created_at, forecast_category, profiles:assigned_to(full_name)")
       .order("created_at", { ascending: true });
     let leadsQuery = supabase
       .from("leads")
       .select("id, status, lead_source, created_at, assigned_to, profiles:assigned_to(full_name)")
       .order("created_at", { ascending: true });
+    let tasksQuery = supabase
+      .from("tasks")
+      .select("id, status, due_date, assigned_to, profiles:assigned_to(full_name)")
+      .order("due_date", { ascending: true });
     if (profile?.role === "sales_representative") {
       dealsQuery = dealsQuery.eq("assigned_to", user.id);
       leadsQuery = leadsQuery.eq("assigned_to", user.id);
+      tasksQuery = tasksQuery.eq("assigned_to", user.id);
     }
-    const [{ data: deals, error: dealsError }, { data: leads, error: leadsError }] = await Promise.all([
+    const [{ data: deals, error: dealsError }, { data: leads, error: leadsError }, { data: tasks, error: tasksError }] = await Promise.all([
       dealsQuery,
       leadsQuery,
+      tasksQuery,
     ]);
 
     if (dealsError) throw dealsError;
     if (leadsError) throw leadsError;
+    if (tasksError) throw tasksError;
 
     const totalDealsClosed = deals.filter((deal) => deal.stage === "Won").length;
     const revenueGenerated = deals
@@ -112,23 +119,59 @@ export async function GET() {
       { name: "Pending", value: Math.round(((stageCounts.get("New Lead") ?? 0) / totalDeals) * 100), color: "#dbeafe" },
     ];
 
-    const repTotals = new Map<string, { deals: number; revenue: number }>();
+    const repTotals = new Map<string, { assignedLeads: number; activeDeals: number; wonDeals: number; lostDeals: number; overdueTasks: number; revenue: number }>();
+    const ensureRep = (name: string) => {
+      const existing = repTotals.get(name) ?? { assignedLeads: 0, activeDeals: 0, wonDeals: 0, lostDeals: 0, overdueTasks: 0, revenue: 0 };
+      repTotals.set(name, existing);
+      return existing;
+    };
+    for (const lead of leads) {
+      const repName = joinedProfileName(lead.profiles) ?? "Unassigned";
+      ensureRep(repName).assignedLeads += 1;
+    }
     for (const deal of deals) {
       const repName = joinedProfileName(deal.profiles) ?? "Unassigned";
-      const existing = repTotals.get(repName) ?? { deals: 0, revenue: 0 };
-      repTotals.set(repName, {
-        deals: existing.deals + 1,
-        revenue: existing.revenue + Number(deal.value ?? 0),
-      });
+      const totals = ensureRep(repName);
+      if (deal.stage === "Won") {
+        totals.wonDeals += 1;
+        totals.revenue += Number(deal.value ?? 0);
+      } else if (deal.stage === "Lost") {
+        totals.lostDeals += 1;
+      } else {
+        totals.activeDeals += 1;
+      }
+    }
+    const today = new Date();
+    const todayKey = new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime();
+    for (const task of tasks) {
+      const repName = joinedProfileName(task.profiles) ?? "Unassigned";
+      const dueTime = task.due_date ? new Date(task.due_date).getTime() : null;
+      if (task.status !== "Done" && dueTime !== null && dueTime < todayKey) ensureRep(repName).overdueTasks += 1;
     }
 
     const teamPerformance = Array.from(repTotals.entries())
       .map(([name, totals]) => ({
         name,
-        deals: totals.deals,
+        assignedLeads: totals.assignedLeads,
+        activeDeals: totals.activeDeals,
+        wonDeals: totals.wonDeals,
+        lostDeals: totals.lostDeals,
+        winRate: totals.wonDeals + totals.lostDeals ? Math.round((totals.wonDeals / (totals.wonDeals + totals.lostDeals)) * 100) : 0,
+        overdueTasks: totals.overdueTasks,
         revenue: totals.revenue,
       }))
       .sort((a, b) => b.revenue - a.revenue);
+    const forecastByMonth = new Map<string, { month: string; commit: number; bestCase: number; pipeline: number }>();
+    for (const deal of deals.filter((item) => item.stage !== "Won" && item.stage !== "Lost")) {
+      const date = deal.expected_close_date ?? deal.created_at;
+      const month = new Date(date).toLocaleString("en-US", { month: "short", timeZone: "UTC" });
+      const bucket = forecastByMonth.get(month) ?? { month, commit: 0, bestCase: 0, pipeline: 0 };
+      const value = Number(deal.value ?? 0);
+      if (deal.forecast_category === "Commit") bucket.commit += value;
+      else if (deal.forecast_category === "Best Case") bucket.bestCase += value;
+      else bucket.pipeline += value;
+      forecastByMonth.set(month, bucket);
+    }
 
     const response: DashboardMetrics = {
       totalDealsClosed,
@@ -139,14 +182,7 @@ export async function GET() {
       sourceSeries,
       pipelineProgress,
       teamPerformance,
-      forecastSeries:
-        revenueSeries.length > 0
-          ? revenueSeries.map((item) => ({
-              month: item.month,
-              committed: Math.round(item.revenue * 0.82),
-              forecast: item.target,
-            }))
-          : [],
+      forecastSeries: Array.from(forecastByMonth.values()),
       velocitySeries:
         deals.length > 0
           ? [
@@ -162,8 +198,10 @@ export async function GET() {
         teamPerformance.length > 0
           ? teamPerformance.map((item) => ({
               name: item.name,
-              quota: Math.round(item.revenue * 1.15),
+              monthlyQuota: 75000,
+              quarterlyQuota: 225000,
               revenue: item.revenue,
+              attainment: Math.round((item.revenue / 75000) * 100),
             }))
           : [],
       activitySeries:

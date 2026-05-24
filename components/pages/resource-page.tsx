@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useMemo, useState } from "react";
 import {
   Bell,
@@ -43,10 +44,12 @@ import {
   useActivities,
   useCompanies,
   useContacts,
+  useDeals,
   useLeads,
   useMe,
   useMetrics,
   useNotes,
+  useSalesReps,
 } from "@/hooks/use-crm";
 import { shortDate, shortDateTime } from "@/lib/utils";
 import { mutateJson } from "@/services/fetcher";
@@ -60,9 +63,21 @@ export function LeadsPageClient() {
   const [convertingLead, setConvertingLead] = useState<Lead | null>(null);
   const [deletePending, setDeletePending] = useState(false);
   const { data, isLoading } = useLeads();
+  const { data: deals } = useDeals();
   const { data: me } = useMe();
   const { mutate } = useSWRConfig();
   const isManager = me?.role === "sales_manager";
+  const convertingDeal = useMemo(() => {
+    if (!convertingLead) return null;
+    return (
+      deals?.find(
+        (deal) =>
+          deal.company === convertingLead.company &&
+          deal.stage !== "Won" &&
+          deal.stage !== "Lost",
+      ) ?? null
+    );
+  }, [convertingLead, deals]);
 
   async function handleDeleteLead(id: string) {
     setDeletePending(true);
@@ -179,19 +194,27 @@ export function LeadsPageClient() {
         {convertingLead ? (
           <div className="space-y-4">
             <p className="text-sm text-muted">
-              Create a deal from this qualified lead. The new deal will appear in the pipeline, and the lead will move to Proposal after saving.
+              {convertingDeal
+                ? "Update the existing open deal for this qualified lead. It will move to Proposal after saving."
+                : "Create a deal from this qualified lead. The new deal will appear in Proposal after saving."}
             </p>
             <DealForm
+              mode={convertingDeal ? "edit" : "create"}
+              id={convertingDeal?.id}
               onDone={(savedDeal) => {
                 void handleLeadConverted(convertingLead, savedDeal);
               }}
               initialValues={{
-                title: `${convertingLead.company} Opportunity`,
-                company: convertingLead.company,
-                value: 0,
-                stage: "Qualified",
-                assigned_to: convertingLead.assigned_to ?? null,
-                expected_close_date: defaultCloseDate(),
+                title: convertingDeal?.title ?? `${convertingLead.company} Opportunity`,
+                company: convertingDeal?.company ?? convertingLead.company,
+                products_services: convertingDeal?.products_services ?? "SalesPro CRM subscription and onboarding",
+                value: convertingDeal?.value ?? 0,
+                stage: "Proposal Sent",
+                loss_reason: convertingDeal?.loss_reason ?? "",
+                next_step: convertingDeal?.next_step ?? "Send proposal follow-up",
+                next_step_date: convertingDeal?.next_step_date ?? defaultCloseDate(),
+                assigned_to: convertingDeal?.assigned_to ?? convertingLead.assigned_to ?? null,
+                expected_close_date: convertingDeal?.expected_close_date ?? defaultCloseDate(),
               }}
             />
           </div>
@@ -362,7 +385,16 @@ export function SimpleList({
   canDeleteRecords?: boolean;
 }) {
   const { mutate } = useSWRConfig();
+  const { data: me } = useMe();
+  const { data: reps } = useSalesReps();
   const globalSearch = useUiStore((state) => state.search);
+  const [repFilter, setRepFilter] = useState("");
+  const [statusFilter, setStatusFilter] = useState("");
+  const isManager = me?.role === "sales_manager";
+  const statuses = useMemo(() => {
+    if (resource !== "tasks") return [];
+    return Array.from(new Set((data ?? []).map((item) => String(item.status ?? "")).filter(Boolean))).sort();
+  }, [data, resource]);
   const canDelete =
     (canDeleteRecords ?? true) &&
     (resource === "companies" ||
@@ -394,8 +426,10 @@ export function SimpleList({
         .join(" ")
         .toLowerCase();
       return terms.every((term) => haystack.includes(term));
-    });
-  }, [data, globalSearch]);
+    })
+    .filter((item) => (repFilter ? item.assigned_to === repFilter : true))
+    .filter((item) => (statusFilter ? item.status === statusFilter : true));
+  }, [data, globalSearch, repFilter, statusFilter]);
 
   async function handleDelete(id: string) {
     setDeletePending(true);
@@ -450,6 +484,9 @@ export function SimpleList({
             email: String(editingItem.email ?? ""),
             phone: String(editingItem.phone ?? ""),
             title: String(editingItem.title ?? ""),
+            preferred_contact_method: String(editingItem.preferred_contact_method ?? "Email") as "Email" | "Phone" | "No preference",
+            timezone: String(editingItem.timezone ?? "Asia/Manila"),
+            best_time_to_contact: String(editingItem.best_time_to_contact ?? "9:00 AM - 5:00 PM"),
             avatar_url:
               typeof editingItem.avatar_url === "string"
                 ? editingItem.avatar_url
@@ -514,6 +551,22 @@ export function SimpleList({
         <CardHeader>
           <CardTitle>{title}</CardTitle>
           <div className="flex gap-2">
+            {isManager && (resource === "contacts" || resource === "tasks") ? (
+              <select value={repFilter} onChange={(event) => setRepFilter(event.target.value)} className="h-10 rounded-lg border border-border bg-white px-3 text-sm outline-none focus:border-primary focus:ring-4 focus:ring-primary/15">
+                <option value="">Any rep</option>
+                {(reps ?? []).map((rep) => (
+                  <option key={rep.id} value={rep.id}>{rep.full_name}</option>
+                ))}
+              </select>
+            ) : null}
+            {resource === "tasks" ? (
+              <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)} className="h-10 rounded-lg border border-border bg-white px-3 text-sm outline-none focus:border-primary focus:ring-4 focus:ring-primary/15">
+                <option value="">Any status</option>
+                {statuses.map((status) => (
+                  <option key={status}>{status}</option>
+                ))}
+              </select>
+            ) : null}
             {onClear ? (
               <Button
                 size="sm"
@@ -527,7 +580,7 @@ export function SimpleList({
             {onAdd ? (
               <Button size="sm" onClick={onAdd}>
                 <Plus className="h-4 w-4" />
-                Add
+                {resource === "notifications" ? "Log" : "Add"}
               </Button>
             ) : null}
           </div>
@@ -609,7 +662,7 @@ export function SimpleList({
       </Modal>
       <Modal
         open={confirmingClear}
-        title="Clear notifications"
+      title="Clear notifications"
         onClose={() => setConfirmingClear(false)}
       >
         <div className="space-y-5">
@@ -863,7 +916,9 @@ function ResourceItem({
             </span>
             <div className="min-w-0">
               <h3 className="truncate font-semibold">
-                {String(item.name ?? "Company")}
+                <Link href={`/companies/${id}`} className="text-primary underline decoration-primary/30 underline-offset-4 hover:decoration-primary">
+                  {String(item.name ?? "Company")}
+                </Link>
               </h3>
               <p className="mt-1 text-sm text-muted">
                 {String(item.domain ?? "No domain")}
@@ -887,10 +942,10 @@ function ResourceItem({
               {String(item.size ?? "Not set")}
             </span>
           </div>
-          <div className="flex items-center gap-2 sm:col-span-2">
-            <CalendarDays className="h-4 w-4" />
-            Added {shortDate(String(item.created_at ?? ""))}
-          </div>
+        </div>
+        <div className="mt-5 flex items-center gap-2 border-t border-border pt-4 text-sm text-muted">
+          <CalendarDays className="h-4 w-4" />
+          Added {shortDate(String(item.created_at ?? ""))}
         </div>
       </div>
     );
@@ -923,7 +978,9 @@ function ResourceItem({
               )}
             </span>
             <div className="min-w-0">
-              <h3 className="truncate font-semibold">{name}</h3>
+              <h3 className="truncate font-semibold">
+                <Link href={`/contacts/${id}`} className="text-primary underline decoration-primary/30 underline-offset-4 hover:decoration-primary">{name}</Link>
+              </h3>
               <p className="mt-1 text-sm text-muted">
                 {String(item.title ?? "No title")} at{" "}
                 {String(item.company ?? "No company")}
@@ -946,8 +1003,12 @@ function ResourceItem({
             Assigned sales rep: {String(item.assigned_user ?? "Unassigned")}
           </div>
           <div className="flex items-center gap-2">
+            <Phone className="h-4 w-4" />
+            Prefers {String(item.preferred_contact_method ?? "Email")} - {String(item.best_time_to_contact ?? "9:00 AM - 5:00 PM")}
+          </div>
+          <div className="flex items-center gap-2">
             <CalendarDays className="h-4 w-4" />
-            Added {shortDate(String(item.created_at ?? ""))}
+            Timezone: {String(item.timezone ?? "Asia/Manila")}
           </div>
         </div>
       </div>
@@ -981,7 +1042,7 @@ function ResourceItem({
                 {status}
               </span>
               <h3 className="mt-4 line-clamp-1 font-semibold">
-                {String(item.title ?? "Task")}
+                <Link href={`/tasks/${id}`} className="text-primary underline decoration-primary/30 underline-offset-4 hover:decoration-primary">{String(item.title ?? "Task")}</Link>
               </h3>
               <p className="mt-2 line-clamp-2 text-sm text-muted">
                 {String(item.description ?? "No description")}
@@ -1023,10 +1084,6 @@ function ResourceItem({
           </div>
           <ResourceCardActions id={id} label="Note" item={item} canDelete={canDelete} onEdit={onEdit} onDelete={onDelete} />
         </div>
-        <div className="mt-5 flex items-center gap-2 border-t border-border pt-4 text-sm text-muted">
-          <CalendarDays className="h-4 w-4" />
-          Added {shortDate(String(item.created_at ?? ""))}
-        </div>
       </div>
     );
   }
@@ -1037,9 +1094,17 @@ function ResourceItem({
       item.metadata && typeof item.metadata === "object" ? item.metadata : {}
     ) as Record<string, unknown>;
     const title = String(item.action ?? "Notification").replace(/_/g, " ");
-    const detail = metadata.title
-      ? `${String(metadata.title)} for ${String(metadata.company ?? "unknown company")}${metadata.stage ? ` is now in ${String(metadata.stage)}` : ""}.`
-      : `${String(item.entity_type ?? "Activity")} update recorded in the CRM.`;
+    const activityType = String(metadata.activity_type ?? "");
+    const subject = String(metadata.subject ?? "");
+    const body = String(metadata.body ?? "");
+    const outcome = String(metadata.outcome ?? "");
+    const scheduledAt = String(metadata.scheduled_at ?? "");
+    const detail = subject
+      ? `${subject}${scheduledAt ? ` scheduled for ${shortDateTime(scheduledAt)}` : ""}${outcome ? ` - ${outcome}` : ""}${body ? `: ${body}` : ""}`
+      : metadata.title
+        ? `${String(metadata.title)} for ${String(metadata.company ?? "unknown company")}${metadata.stage ? ` is now in ${String(metadata.stage)}` : ""}.`
+        : `${String(item.entity_type ?? "Activity")} update recorded in the CRM.`;
+    const ActivityIcon = activityType === "Email" ? Mail : activityType === "Call" ? Phone : activityType === "Meeting" || activityType === "Demo" ? CalendarDays : Bell;
     return (
       <div
         role="button"
@@ -1059,7 +1124,7 @@ function ResourceItem({
           <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg ${
             isRead ? "bg-slate-50 text-muted" : "bg-blue-50 text-primary"
           }`}>
-            <Bell className="h-5 w-5" />
+            <ActivityIcon className="h-5 w-5" />
           </span>
           <div className="min-w-0 space-y-2">
             <div>

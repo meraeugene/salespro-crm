@@ -18,5 +18,19 @@
     "full_name": "Jordan Lee",
     "role": "sales_representative",
     "manager_email": "manager@salespro.test"
+  },
+  {
+    "email": "rep2@salespro.test",
+    "password": "Salespro123!",
+    "full_name": "Sophia Martinez",
+    "role": "sales_representative",
+    "manager_email": "manager@salespro.test"
+  },
+  {
+    "email": "rep3@salespro.test",
+    "password": "Salespro123!",
+    "full_name": "Ethan Walker",
+    "role": "sales_representative",
+    "manager_email": "manager@salespro.test"
   }
 ]

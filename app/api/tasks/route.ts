@@ -13,11 +13,11 @@ export async function GET() {
   if (!hasSupabaseEnv()) return NextResponse.json(tasks);
   const { supabase, user, profile, error } = await requireRole([...salesRoles]);
   if (error) return error;
-  let query = supabase.from("tasks").select("*, profiles:assigned_to(full_name)").order("due_date", { ascending: true });
+  let query = supabase.from("tasks").select("*, assigned_profile:profiles!tasks_assigned_to_fkey(full_name), creator:profiles!tasks_created_by_fkey(full_name)").order("due_date", { ascending: true });
   if (profile?.role === "sales_representative") query = query.eq("assigned_to", user.id);
   const { data, error: dbError } = await query;
   if (dbError) return handleError(dbError);
-  return NextResponse.json(data.map((task) => ({ ...task, assigned_user: task.profiles?.full_name ?? null })));
+  return NextResponse.json(data.map((task) => ({ ...task, assigned_user: task.assigned_profile?.full_name ?? null, created_by_user: task.creator?.full_name ?? null })));
 }
 
 export async function POST(request: Request) {
@@ -29,6 +29,19 @@ export async function POST(request: Request) {
   const assignedTo = profile?.role === "sales_representative" ? user.id : (parsed.data.assigned_to ?? user.id);
   const { data, error: dbError } = await supabase.from("tasks").insert({ ...parsed.data, assigned_to: assignedTo, created_by: user.id }).select().single();
   if (dbError) return handleError(dbError);
+  await supabase.from("activities").insert({
+    action: "Task created",
+    entity_type: "task",
+    entity_id: data.id,
+    created_by: user.id,
+    metadata: {
+      title: data.title,
+      status: data.status,
+      due_date: data.due_date,
+      related_type: data.related_type,
+      related_id: data.related_id,
+    },
+  });
   return NextResponse.json(data);
 }
 
@@ -60,5 +73,19 @@ export async function PATCH(request: Request) {
   if (profile?.role === "sales_representative") query = query.eq("assigned_to", user.id);
   const { data, error: dbError } = await query.select().single();
   if (dbError) return handleError(dbError);
+  await supabase.from("activities").insert({
+    action: updates.status ? `Task moved to ${updates.status}` : "Task updated",
+    entity_type: "task",
+    entity_id: data.id,
+    created_by: user.id,
+    metadata: {
+      ...updates,
+      title: data.title,
+      status: data.status,
+      due_date: data.due_date,
+      related_type: data.related_type,
+      related_id: data.related_id,
+    },
+  });
   return NextResponse.json(data);
 }

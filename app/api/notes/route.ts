@@ -33,6 +33,17 @@ export async function POST(request: Request) {
     .select()
     .single();
   if (dbError) return handleError(dbError);
+  await supabase.from("activities").insert({
+    action: "Note added",
+    entity_type: data.related_type,
+    entity_id: data.related_id,
+    created_by: user.id,
+    metadata: {
+      title: "Note",
+      body: data.body,
+      related_type: data.related_type,
+    },
+  });
   return NextResponse.json(data);
 }
 
@@ -71,5 +82,16 @@ export async function PATCH(request: Request) {
   if (profile?.role === "sales_representative") query = query.eq("created_by", user.id);
   const { data, error: dbError } = await query.select().single();
   if (dbError) return handleError(dbError);
+  await supabase.from("activities").insert({
+    action: "Note updated",
+    entity_type: data.related_type,
+    entity_id: data.related_id,
+    created_by: user.id,
+    metadata: {
+      title: "Note",
+      body: data.body,
+      related_type: data.related_type,
+    },
+  });
   return NextResponse.json(data);
 }

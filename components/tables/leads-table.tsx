@@ -1,7 +1,8 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ArrowDownUp, BriefcaseBusiness, Filter, MoreHorizontal, Pencil, RotateCcw, Search, Trash2, X } from "lucide-react";
+import { ArrowDownUp, BriefcaseBusiness, Eye, Filter, MoreHorizontal, Pencil, RotateCcw, Search, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -9,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Pagination } from "@/components/ui/pagination";
 import { Skeleton } from "@/components/ui/skeleton";
 import { StatusBadge } from "@/components/ui/status-badge";
+import { useMe, useSalesReps } from "@/hooks/use-crm";
 import { shortDate } from "@/lib/utils";
 import { useUiStore } from "@/store/ui-store";
 import type { Lead } from "@/types/crm";
@@ -21,11 +23,15 @@ export function LeadsTable({ leads, isLoading = false, onEdit, onDelete, onConve
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [statusFilter, setStatusFilter] = useState("");
   const [sourceFilter, setSourceFilter] = useState("");
+  const [repFilter, setRepFilter] = useState("");
+  const { data: me } = useMe();
+  const { data: reps } = useSalesReps();
+  const isManager = me?.role === "sales_manager";
   const pageSize = 5;
 
   const statuses = useMemo(() => Array.from(new Set((leads ?? []).map((lead) => lead.status))).sort(), [leads]);
   const sources = useMemo(() => Array.from(new Set((leads ?? []).map((lead) => lead.lead_source))).sort(), [leads]);
-  const activeFilterCount = Number(Boolean(statusFilter)) + Number(Boolean(sourceFilter));
+  const activeFilterCount = Number(Boolean(statusFilter)) + Number(Boolean(sourceFilter)) + Number(Boolean(repFilter));
   const hasFilters = activeFilterCount > 0;
   const showActions = Boolean(onEdit || onDelete || onConvert);
 
@@ -34,13 +40,14 @@ export function LeadsTable({ leads, isLoading = false, onEdit, onDelete, onConve
     const terms = `${globalSearch} ${query}`.toLowerCase().split(/\s+/).filter(Boolean);
     return source
       .filter((lead) => {
-        const haystack = `${lead.full_name} ${lead.company} ${lead.email} ${lead.phone} ${lead.lead_source} ${lead.assigned_user ?? ""}`.toLowerCase();
+        const haystack = `${lead.full_name} ${lead.company} ${lead.email} ${lead.phone} ${lead.lead_source} ${lead.notes ?? ""} ${lead.assigned_user ?? ""}`.toLowerCase();
         return terms.every((term) => haystack.includes(term));
       })
       .filter((lead) => (statusFilter ? lead.status === statusFilter : true))
       .filter((lead) => (sourceFilter ? lead.lead_source === sourceFilter : true))
+      .filter((lead) => (repFilter ? lead.assigned_to === repFilter : true))
       .sort((a, b) => (sortAsc ? a.full_name.localeCompare(b.full_name) : b.full_name.localeCompare(a.full_name)));
-  }, [globalSearch, leads, query, sortAsc, sourceFilter, statusFilter]);
+  }, [globalSearch, leads, query, repFilter, sortAsc, sourceFilter, statusFilter]);
 
   const pageCount = Math.max(1, Math.ceil(filtered.length / pageSize));
   const rows = filtered.slice((page - 1) * pageSize, page * pageSize);
@@ -67,7 +74,7 @@ export function LeadsTable({ leads, isLoading = false, onEdit, onDelete, onConve
             <div className="mb-4 flex items-center justify-between gap-3">
               <div>
                 <h3 className="font-semibold">Filter leads</h3>
-                <p className="mt-1 text-xs text-muted">Narrow the table by status or source.</p>
+                <p className="mt-1 text-xs text-muted">Narrow the table by status, source, or owner.</p>
               </div>
               <Button type="button" variant="ghost" size="icon" className="bg-blue-50 text-primary hover:bg-primary hover:text-white" onClick={() => setFiltersOpen(false)} aria-label="Close filters">
                 <X className="h-4 w-4" />
@@ -88,14 +95,24 @@ export function LeadsTable({ leads, isLoading = false, onEdit, onDelete, onConve
                   {sources.map((source) => <option key={source}>{source}</option>)}
                 </select>
               </label>
+              {isManager ? (
+                <label className="block text-sm font-medium">
+                  <span className="mb-2 block">Sales rep</span>
+                  <select value={repFilter} onChange={(event) => { setRepFilter(event.target.value); setPage(1); }} className="h-10 w-full rounded-lg border border-border bg-white px-3 text-sm outline-none focus:border-primary focus:ring-4 focus:ring-primary/15">
+                    <option value="" className="text-muted">Any rep</option>
+                    {(reps ?? []).map((rep) => <option key={rep.id} value={rep.id}>{rep.full_name}</option>)}
+                  </select>
+                </label>
+              ) : null}
               {hasFilters ? (
                 <div className="flex flex-wrap gap-2 text-xs">
                   {statusFilter ? <span className="rounded-full bg-blue-50 px-2.5 py-1 text-primary">Status: {statusFilter}</span> : null}
                   {sourceFilter ? <span className="rounded-full bg-blue-50 px-2.5 py-1 text-primary">Source: {sourceFilter}</span> : null}
+                  {repFilter ? <span className="rounded-full bg-blue-50 px-2.5 py-1 text-primary">Rep: {(reps ?? []).find((rep) => rep.id === repFilter)?.full_name ?? "Selected"}</span> : null}
                 </div>
               ) : null}
               <div className="grid grid-cols-2 gap-2">
-                <Button type="button" variant="secondary" size="sm" onClick={() => { setStatusFilter(""); setSourceFilter(""); setPage(1); }}>
+                <Button type="button" variant="secondary" size="sm" onClick={() => { setStatusFilter(""); setSourceFilter(""); setRepFilter(""); setPage(1); }}>
                   <RotateCcw className="h-4 w-4" />
                   Reset
                 </Button>
@@ -120,14 +137,14 @@ export function LeadsTable({ leads, isLoading = false, onEdit, onDelete, onConve
         </div>
       ) : (
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[1080px] border-collapse text-left text-sm">
+          <table className="w-full min-w-[1040px] border-collapse text-left text-sm">
             <thead className="bg-slate-50 text-muted">
               <tr>
                 <th className="px-5 py-4 font-medium">Lead Name</th>
                 <th className="px-5 py-4 font-medium">Company</th>
                 <th className="px-5 py-4 font-medium">Email Address</th>
-                <th className="px-5 py-4 font-medium">Phone Number</th>
                 <th className="px-5 py-4 font-medium">Lead Source</th>
+                <th className="px-5 py-4 font-medium">Notes</th>
                 <th className="px-5 py-4 font-medium">Last Contacted</th>
                 <th className="px-5 py-4 font-medium">Status</th>
                 <th className="px-5 py-4 font-medium">Assigned Sales Rep</th>
@@ -137,11 +154,17 @@ export function LeadsTable({ leads, isLoading = false, onEdit, onDelete, onConve
             <tbody>
               {rows.map((lead, index) => (
                 <tr key={lead.id} className="border-t border-border hover:bg-slate-50/70">
-                  <td className="px-5 py-4 font-medium">{lead.full_name}</td>
+                  <td className="px-5 py-4 font-medium">
+                    <Link href={`/leads/${lead.id}`} className="text-primary underline decoration-primary/30 underline-offset-4 hover:decoration-primary">
+                      {lead.full_name}
+                    </Link>
+                  </td>
                   <td className="px-5 py-4 text-muted">{lead.company}</td>
                   <td className="px-5 py-4 text-muted">{lead.email}</td>
-                  <td className="px-5 py-4 text-muted">{lead.phone}</td>
                   <td className="px-5 py-4 text-muted">{lead.lead_source}</td>
+                  <td className="max-w-64 px-5 py-4 text-muted">
+                    <span className="block truncate" title={lead.notes ?? "No notes"}>{lead.notes ?? "No notes"}</span>
+                  </td>
                   <td className="px-5 py-4 text-muted">{shortDate(lead.last_contacted)}</td>
                   <td className="px-5 py-4">
                     <StatusBadge status={lead.status} />
@@ -222,6 +245,14 @@ function LeadActions({ lead, onEdit, onDelete, onConvert }: { lead: Lead; onEdit
               Convert to Deal
             </button>
           ) : null}
+          <Link
+            href={`/leads/${lead.id}`}
+            onClick={() => setOpen(false)}
+            className="flex h-9 w-full items-center gap-2 rounded-md px-3 text-left text-sm text-primary underline decoration-primary/30 underline-offset-4 hover:bg-blue-50 hover:decoration-primary"
+          >
+            <Eye className="h-4 w-4" />
+            View details
+          </Link>
           {onEdit ? (
             <button
               type="button"
