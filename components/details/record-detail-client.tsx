@@ -137,6 +137,10 @@ function daysSince(value?: string | null) {
   return Math.max(0, Math.floor((Date.now() - time) / 86_400_000));
 }
 
+function displayValue(label: string, value: string) {
+  return label.toLowerCase().includes("timezone") ? value.replaceAll("_", " ") : value;
+}
+
 export function RecordDetailClient({ kind, id }: { kind: RecordKind; id: string }) {
   const { data: companies, isLoading: companiesLoading } = useCompanies();
   const { data: leads, isLoading: leadsLoading } = useLeads();
@@ -311,7 +315,7 @@ function RecordSummary({ kind, record, company }: { kind: RecordKind; record: Le
       { label: "Source", value: lead.lead_source },
       { label: "Last contacted", value: shortDate(lead.last_contacted) },
       { label: "Assigned sales rep", value: lead.assigned_user ?? "Unassigned" },
-      { label: "Lead notes", value: lead.notes ?? "No notes recorded", clamp: true },
+      { label: "Lead notes", value: lead.notes ?? "No notes recorded" },
       { label: "Created by", value: lead.created_by_user ?? lead.assigned_user ?? "Not recorded" },
       { label: "Created at", value: shortDateTime(lead.created_at) },
       { label: "Updated at", value: shortDateTime(lead.updated_at ?? lead.created_at) },
@@ -322,7 +326,7 @@ function RecordSummary({ kind, record, company }: { kind: RecordKind; record: Le
     rows.push(
       { label: "Deal title", value: deal.title },
       { label: "Company", value: deal.company },
-      { label: "Products/services", value: deal.products_services ?? "Not specified", clamp: true },
+      { label: "Products/services", value: deal.products_services ?? "Not specified" },
       { label: "Value", value: currency(deal.value) },
       { label: "Probability", value: `${deal.probability}%` },
       { label: "Stage", value: deal.stage },
@@ -377,13 +381,13 @@ function RecordSummary({ kind, record, company }: { kind: RecordKind; record: Le
       <CardContent>
         <div className="grid gap-3 md:grid-cols-2">
           {rows.map((row) => (
-            <div key={row.label} className="flex gap-3 rounded-lg border border-border bg-slate-50 p-3">
+            <div key={row.label} className={`flex gap-3 rounded-lg border border-border bg-slate-50 p-3 ${row.clamp ? "" : "md:min-h-[66px]"}`}>
               <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-blue-50 text-primary">
                 <FieldIcon label={row.label} />
               </span>
               <div className="min-w-0">
                 <p className="text-xs font-medium text-muted">{row.label}</p>
-                <p className={`mt-1 break-words text-sm font-semibold ${row.clamp ? "line-clamp-1" : ""}`} title={row.value}>{row.value}</p>
+                <p className={`mt-1 break-words text-sm font-semibold ${row.clamp ? "line-clamp-1" : ""}`} title={displayValue(row.label, row.value)}>{displayValue(row.label, row.value)}</p>
               </div>
             </div>
           ))}

@@ -76,6 +76,10 @@ function SaveLabel({ saving, label }: { saving: boolean; label: string }) {
   );
 }
 
+function timezoneLabel(timezone: string) {
+  return timezone.replaceAll("_", " ");
+}
+
 export function CompanyForm({ onDone, initialValues, id, mode = "create" }: { onDone?: () => void; initialValues?: Partial<z.input<typeof companySchema>>; id?: string; mode?: FormMode }) {
   const { mutate } = useSWRConfig();
   const form = useForm<z.input<typeof companySchema>>({ resolver: zodResolver(companySchema), defaultValues: { name: initialValues?.name ?? "", domain: initialValues?.domain ?? "", industry: initialValues?.industry ?? "", size: initialValues?.size ?? "" } });
@@ -199,7 +203,7 @@ export function ContactForm({ onDone, initialValues, id, mode = "create" }: { on
         <Required>Timezone</Required>
         <Select className={`mt-2 ${errorClass(errors.timezone?.message)}`} {...form.register("timezone")}>
           {timezoneOptions.map((timezone) => (
-            <option key={timezone}>{timezone}</option>
+            <option key={timezone} value={timezone}>{timezoneLabel(timezone)}</option>
           ))}
         </Select>
         <FieldError message={errors.timezone?.message} />
@@ -373,7 +377,9 @@ export function DealForm({ onDone, initialValues, id, mode = "create" }: { onDon
         <label className="text-sm font-medium md:col-span-2"><Required>Loss reason</Required><Textarea className={`mt-2 ${errorClass(errors.loss_reason?.message)}`} placeholder="Budget frozen, chose competitor, timing changed..." {...form.register("loss_reason")} /><FieldError message={errors.loss_reason?.message} /></label>
       ) : null}
       <FormError message={errors.root?.message} />
-      <Button className="md:col-span-2" disabled={form.formState.isSubmitting}><SaveLabel saving={form.formState.isSubmitting} label={mode === "edit" ? "Update Deal" : "Save Deal"} /></Button>
+      <div className="sticky bottom-0 z-10 -mx-5 -mb-5 border-t border-border bg-white p-5 md:col-span-2">
+        <Button className="w-full" disabled={form.formState.isSubmitting}><SaveLabel saving={form.formState.isSubmitting} label={mode === "edit" ? "Update Deal" : "Save Deal"} /></Button>
+      </div>
     </form>
   );
 }

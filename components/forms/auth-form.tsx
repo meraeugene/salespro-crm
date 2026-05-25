@@ -8,6 +8,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import type { z } from "zod";
 import {
   AlertCircle,
+  ArrowLeft,
   BadgeDollarSign,
   Eye,
   EyeOff,
@@ -190,7 +191,15 @@ export function AuthForm({ mode }: { mode: "login" | "forgot" }) {
                 >
                   Forgot password?
                 </Link>
-              ) : null}
+              ) : (
+                <Link
+                  href="/auth/login"
+                  className="inline-flex items-center gap-2 font-medium text-primary transition-colors hover:text-primary-dark"
+                >
+                  <ArrowLeft className="h-4 w-4" />
+                  Back to login
+                </Link>
+              )}
             </div>
           </div>
         </section>

@@ -1,25 +1,44 @@
 "use client";
 
-import { Bell, Search } from "lucide-react";
+import {
+  BarChart3,
+  Bell,
+  BriefcaseBusiness,
+  Building2,
+  CheckSquare,
+  LayoutDashboard,
+  NotebookText,
+  Search,
+  Settings,
+  UserRound,
+  UsersRound,
+} from "lucide-react";
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { type ComponentType, useMemo, useState } from "react";
 import { Input } from "@/components/ui/input";
 import { useActivities } from "@/hooks/use-crm";
 import { useUiStore } from "@/store/ui-store";
 
 const searchTargets = [
-  { label: "Dashboard", href: "/dashboard", keywords: "home overview metrics" },
-  { label: "Leads", href: "/leads", keywords: "prospects qualification source" },
-  { label: "Deals", href: "/deals", keywords: "pipeline opportunities forecast approval review" },
-  { label: "Contacts", href: "/contacts", keywords: "people stakeholders customers preferences" },
-  { label: "Companies", href: "/companies", keywords: "accounts domains organizations" },
-  { label: "Tasks", href: "/tasks", keywords: "follow ups overdue reminders" },
-  { label: "Notes", href: "/notes", keywords: "call notes history" },
-  { label: "Notifications", href: "/activities", keywords: "activity timeline alerts" },
-  { label: "Analytics", href: "/analytics", keywords: "reports quota performance forecast" },
-  { label: "Team", href: "/team", keywords: "reps users roles" },
-  { label: "Settings", href: "/settings", keywords: "profile password account" },
+  { label: "Dashboard", href: "/dashboard", keywords: "home overview metrics", icon: LayoutDashboard },
+  { label: "Leads", href: "/leads", keywords: "prospects qualification source", icon: UserRound },
+  { label: "Deals", href: "/deals", keywords: "pipeline opportunities forecast approval review", icon: BriefcaseBusiness },
+  { label: "Contacts", href: "/contacts", keywords: "people stakeholders customers preferences", icon: UsersRound },
+  { label: "Companies", href: "/companies", keywords: "accounts domains organizations", icon: Building2 },
+  { label: "Tasks", href: "/tasks", keywords: "follow ups overdue reminders", icon: CheckSquare },
+  { label: "Notes", href: "/notes", keywords: "call notes history", icon: NotebookText },
+  { label: "Notifications", href: "/activities", keywords: "activity timeline alerts", icon: Bell },
+  { label: "Analytics", href: "/analytics", keywords: "reports quota performance forecast", icon: BarChart3 },
+  { label: "Team", href: "/team", keywords: "reps users roles", icon: UsersRound },
+  { label: "Settings", href: "/settings", keywords: "profile password account", icon: Settings },
 ];
+
+type SearchTarget = {
+  label: string;
+  href: string;
+  keywords: string;
+  icon: ComponentType<{ className?: string }>;
+};
 
 export function Navbar() {
   const [search, setSearch] = useState("");
@@ -51,16 +70,22 @@ export function Navbar() {
             {focused ? (
               <div className="absolute left-0 right-0 top-12 z-30 overflow-hidden rounded-lg border border-border bg-white p-1 shadow-[0_18px_40px_rgba(17,24,39,0.12)]">
                 {suggestions.length ? (
-                  suggestions.map((target) => (
+                  suggestions.map((target: SearchTarget) => {
+                    const Icon = target.icon;
+                    return (
                     <Link
                       key={target.href}
                       href={target.href}
-                      className="block rounded-md px-3 py-2 text-sm font-medium hover:bg-blue-50 hover:text-primary"
+                      className="flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium hover:bg-blue-50 hover:text-primary"
                       onClick={() => setSearch("")}
                     >
+                      <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-blue-50 text-primary">
+                        <Icon className="h-4 w-4" />
+                      </span>
                       {target.label}
                     </Link>
-                  ))
+                    );
+                  })
                 ) : (
                   <div className="px-3 py-2 text-sm text-muted">No matching page or feature.</div>
                 )}
